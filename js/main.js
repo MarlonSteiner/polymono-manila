@@ -43,7 +43,6 @@ function startHome() {
   const save = loadSave(), room = savedRoom();
   $('#home-ui').innerHTML = `
     <div class="home-logo">${logoSVG()}</div>
-    <p class="tagline">Buy the bay. Build the skyline.<br>The property game of Metro Manila.</p>
     <div class="home-btns">
       ${save ? `<button class="btn primary big" id="h-cont">${icon('speed')}<span>Continue</span><small>Round ${save.round} · ${save.players.filter((p) => !p.bankrupt).length} players left</small></button>` : ''}
       ${room ? `<button class="btn gold big" id="h-rejoin">${icon('user')}<span>Rejoin room ${esc(room)}</span></button>` : ''}
