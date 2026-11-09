@@ -213,7 +213,14 @@ document.addEventListener('gesturestart', (e) => e.preventDefault());
 let lastTouch = 0;
 document.addEventListener('touchend', (e) => { const now = Date.now(); if (now - lastTouch < 320 && !e.target.closest('input')) e.preventDefault(); lastTouch = now; }, { passive: false });
 
-if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  // A new version took over: reload to run it, but only from the home screen so no game gets cut off.
+  const updating = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (updating && document.querySelector('#home.on')) location.reload();
+  });
+  navigator.serviceWorker.register('sw.js');
+}
 
 const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
 Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1200))]).then(() => {
