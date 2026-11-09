@@ -536,11 +536,7 @@ input { font: inherit; -webkit-user-select: text; user-select: text; }
 @keyframes breathe { 50% { transform: scale(1.04, .96); } }
 .token.landed .hop { animation: land .5s var(--ease-pop); }
 @keyframes land { 0% { transform: scale(1.25, .7); } 50% { transform: scale(.92, 1.12) translateY(-6px); } 100% { transform: none; } }
-.token .cnt { position: absolute; left: 50%; top: -44px; min-width: 30px; height: 30px; padding: 0 6px; translate: -50% 0; border-radius: 99px; display: grid; place-items: center;
-  background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--pc, var(--ink)); font: 700 18px/1 var(--display); color: var(--ink); opacity: 0; transform: scale(.4); transition: opacity .15s, transform .2s; }
-.token .cnt.tick { opacity: 1; animation: tick .3s var(--ease-pop); transform: none; }
-@keyframes tick { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
-.token.hopping .ring, .token:has(.cnt.tick) .ring { visibility: hidden; }
+.token.hopping .ring { visibility: hidden; }
 
 .fx { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; pointer-events: none; z-index: 6; }
 .fx .bb { position: absolute; left: 0; top: 0; width: 0; height: 0; }

@@ -120,7 +120,7 @@ export class BoardView {
       if (!el) {
         el = document.createElement('div');
         el.className = 'token';
-        el.innerHTML = `<div class="bb"><div class="hop">${tokenSVG(p.token)}<i class="ring" style="--pc:${p.color}"></i></div><b class="cnt" style="--pc:${p.color}"></b></div>`;
+        el.innerHTML = `<div class="bb"><div class="hop">${tokenSVG(p.token)}<i class="ring" style="--pc:${p.color}"></i></div></div>`;
         this.plane.appendChild(el);
         this.tokens.set(p.id, el);
       }
@@ -190,7 +190,7 @@ export class BoardView {
   wait(ms) { return new Promise((r) => setTimeout(r, ms / this.speed)); }
 
   async hop(p, from, steps, sfx) {
-    const el = this.tokens.get(p.id), cnt = el.querySelector('.cnt');
+    const el = this.tokens.get(p.id);
     el.dataset.moving = '1';
     el.classList.remove('landed');
     const dir = Math.sign(steps), n = Math.abs(steps);
@@ -202,7 +202,6 @@ export class BoardView {
       const pos = (from + dir * k + 40) % 40;
       const pt = this.slot(p, pos, false);
       el.classList.remove('hopping'); void el.offsetWidth; el.classList.add('hopping');
-      if (n > 1) { cnt.textContent = left || ''; cnt.classList.remove('tick'); void cnt.offsetWidth; cnt.classList.toggle('tick', left > 0); }
       this.setTokenPos(p.id, pt);
       if (this.mode === 'follow') { this.focusPid = p.id; this.focusPos = pos; this.applyCamera(false, per * 1.6); }
       sfx?.(k, n);
@@ -210,7 +209,6 @@ export class BoardView {
       this.puff(pt);
       await this.wait(per * this.speed * 0.18);
     }
-    cnt.classList.remove('tick'); cnt.textContent = '';
     el.classList.remove('hopping'); void el.offsetWidth; el.classList.add('landed');
     this.ripple((from + steps + 40) % 40, p.color);
     delete el.dataset.moving;
