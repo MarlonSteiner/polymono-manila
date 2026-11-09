@@ -115,6 +115,51 @@ export function tree(blossom = true, s = 1) {
   return { svg, w: 60 * s, h: 72 * s };
 }
 
+// The Philippine flag on a tall pole, waving: blue over red, a white triangle with the golden sun and three stars.
+export function flagpole(s = 1) {
+  const star = (x, y, r) => {
+    const p = Array.from({ length: 10 }, (_, k) => {
+      const a = -Math.PI / 2 + (k * Math.PI) / 5, rr = k % 2 ? r * 0.45 : r;
+      return `${(x + Math.cos(a) * rr).toFixed(2)},${(y + Math.sin(a) * rr).toFixed(2)}`;
+    }).join(' ');
+    return `<polygon points="${p}" fill="#fcd116" stroke="none"/>`;
+  };
+  const rays = Array.from({ length: 8 }, (_, k) => {
+    const a = (k * Math.PI) / 4;
+    return `<path d="M${(11 + Math.cos(a) * 5.4).toFixed(2)},${(18 + Math.sin(a) * 5.4).toFixed(2)} L${(11 + Math.cos(a) * 8.6).toFixed(2)},${(18 + Math.sin(a) * 8.6).toFixed(2)}" stroke="#fcd116" stroke-width="2.2" stroke-linecap="round"/>`;
+  }).join('');
+  const W = 72, H = 36, T = H * 0.866;
+  const svg = `<svg viewBox="-16 -150 100 156" xmlns="http://www.w3.org/2000/svg" overflow="visible">
+    <defs>
+      <clipPath id="ph-flag-clip"><rect x="0" y="0" width="${W}" height="${H}"/></clipPath>
+      <linearGradient id="ph-flag-sheen" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".35" stop-color="#fff" stop-opacity=".28"/>
+        <stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset=".72" stop-color="${C.ink}" stop-opacity=".18"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+    </defs>
+    <ellipse cx="2" cy="2" rx="16" ry="5" fill="${C.ink}" opacity=".14"/>
+    <g stroke="${C.ink}" stroke-width="1.8" stroke-linejoin="round">
+      <path d="M-10,2 L-7,-6 L9,-6 L12,2 Z" fill="${C.stone}"/>
+      <rect x="-1.6" y="-146" width="3.6" height="141" fill="#e9e4da"/>
+      <circle cx="0.2" cy="-148" r="3.6" fill="#f2c443"/>
+    </g>
+    <g transform="translate(2 -144)">
+      <g>
+        <animateTransform attributeName="transform" type="skewY" values="0;5;-2;3;0" dur="3.2s" repeatCount="indefinite"/>
+        <animateTransform attributeName="transform" type="scale" values="1 1;.93 1;.98 1;.95 1;1 1" dur="3.2s" repeatCount="indefinite" additive="sum"/>
+        <g clip-path="url(#ph-flag-clip)">
+          <rect x="0" y="0" width="${W}" height="${H / 2}" fill="#0038a8"/>
+          <rect x="0" y="${H / 2}" width="${W}" height="${H / 2}" fill="#ce1126"/>
+          <polygon points="0,0 ${T.toFixed(2)},${H / 2} 0,${H}" fill="#fff"/>
+          <circle cx="11" cy="18" r="4.4" fill="#fcd116"/>${rays}
+          ${star(3.6, 3.8, 2.3)}${star(3.6, 32.2, 2.3)}${star(T - 4.6, 18, 2.3)}
+          <rect x="-${W}" y="0" width="${W * 2}" height="${H}" fill="url(#ph-flag-sheen)">
+            <animate attributeName="x" values="-${W};0" dur="1.6s" repeatCount="indefinite"/></rect>
+        </g>
+        <rect x="0" y="0" width="${W}" height="${H}" fill="none" stroke="${C.ink}" stroke-width="2" stroke-linejoin="round"/>
+      </g>
+    </g></svg>`;
+  return { svg, w: 100 * s, h: 156 * s };
+}
+
 export function palm(s = 1) {
   const svg = `<svg viewBox="-34 -84 68 90" xmlns="http://www.w3.org/2000/svg"><g stroke="${C.ink}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">
     <ellipse cx="2" cy="2" rx="14" ry="4.5" fill="${C.ink}" opacity=".13" stroke="none"/>
@@ -500,6 +545,8 @@ export function centerSprites() {
     { ...T(palm(), 300, 520), anim: 'sway' }, { ...T(palm(), 300, 640), anim: 'sway' }, { ...T(palm(), 290, 780), anim: 'sway' },
     { ...T(tree(), 820, 690), anim: 'sway soft' }, { ...T(tree(), 520, 820), anim: 'sway soft' },
     { svg: logoSVG(), w: 300, h: 125, x: 470, y: 555, s: 1, logo: true, anim: 'bob' },
+    // Luneta-style flagpole on its own lawn in the south-east, clear of the sign from every side
+    { ...flagpole(), x: 700, y: 790, s: 1 },
   ];
 }
 
