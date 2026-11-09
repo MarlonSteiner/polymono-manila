@@ -5,11 +5,11 @@ Plain HTML/CSS/JS, no build step. All art is hand-built SVG in `js/art.js`.
 
 **Play:** https://marlonsteiner.github.io/polymono-manila/
 
-<p align="center">
-  <img src="screenshots/home.webp" alt="Home screen with the spinning Manila board" width="260">
-  <img src="screenshots/board.webp" alt="In a game: the jeepney on Merienda's row, the skyline and the Pasig" width="260">
-  <img src="screenshots/buy.png" alt="Landing on Tubig Co. with the buy or auction card" width="260">
-</p>
+<table align="center"><tr>
+  <td><img src="screenshots/home.webp" alt="Home screen with the spinning Manila board" width="250"></td>
+  <td><img src="screenshots/board.webp" alt="In a game: the jeepney on Merienda's row, the skyline and the Pasig" width="250"></td>
+  <td><img src="screenshots/buy.png" alt="Landing on Tubig Co. with the buy or auction card" width="250"></td>
+</tr></table>
 
 - 2–6 players on one device, any mix of humans and CPUs
 - Online rooms: each player on their own phone or iPad, joined with a 5-letter code or invite link
