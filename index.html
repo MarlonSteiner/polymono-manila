@@ -23,6 +23,18 @@
   <section id="setup" class="screen"><div id="setup-ui"></div></section>
   <section id="game" class="screen"></section>
   <div id="layer"><div id="toasts"></div></div>
+  <script>
+    // Right after an update the host can briefly serve a mix of old and new files, and the game won't start.
+    // If it hasn't started after a few seconds, or a file fails to load, reload once to get a matching set.
+    (function () {
+      var retry = function () {
+        try { if (sessionStorage.getItem('pm-retry')) return; sessionStorage.setItem('pm-retry', '1'); } catch (e) { return; }
+        location.reload();
+      };
+      window.addEventListener('error', function (e) { if (/module|export|import/i.test(String(e.message || ''))) retry(); });
+      setTimeout(function () { if (!document.body.classList.contains('ready')) retry(); }, 6000);
+    })();
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

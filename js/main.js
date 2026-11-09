@@ -228,6 +228,7 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') {
 const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
 Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1200))]).then(() => {
   document.body.classList.add('ready');
+  try { sessionStorage.removeItem('pm-retry'); } catch {}
   // Invite links look like ?room=ABCDE
   const invite = cleanCode(new URLSearchParams(location.search).get('room') || '');
   if (invite) {
