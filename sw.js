@@ -1,5 +1,5 @@
 // Network first, so updates show up right away; the cache keeps the game playable offline.
-const CACHE = 'polymono-manila-v6';
+const CACHE = 'polymono-manila-v7';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/main.js', 'js/engine.js', 'js/ai.js', 'js/ui.js', 'js/board.js', 'js/art.js', 'js/data.js', 'js/audio.js',
   'js/net.js', 'js/online.js', 'vendor/mqtt.min.js',

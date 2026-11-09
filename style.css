@@ -134,7 +134,9 @@ input { font: inherit; -webkit-user-select: text; user-select: text; }
 .home-logo { width: min(460px, 88vw); animation: logoIn .9s var(--ease-pop) both; filter: drop-shadow(0 8px 0 rgba(74, 52, 40, .22)); }
 .home-logo svg { width: 100%; display: block; }
 @keyframes logoIn { from { transform: translateY(-30px) scale(.8); opacity: 0; } }
-.tagline { margin: auto 0 18px; text-align: center; font: 600 18px/1.35 var(--display); color: var(--ink); text-shadow: 0 1px 0 #fff8; }
+.tagline { margin: auto 0 18px; padding: 9px 18px 10px; text-align: center; font: 600 17px/1.35 var(--display); color: var(--ink);
+  background: rgba(255, 250, 240, .94); border: 2.5px solid var(--ink); border-radius: 18px; box-shadow: 0 4px 0 var(--ink);
+  transform: rotate(-1.2deg); animation: rise .7s .1s var(--ease-pop) both; }
 .home-btns { display: flex; flex-direction: column; gap: 14px; width: min(360px, 88vw); animation: rise .7s .2s var(--ease-pop) both; }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
 .fine { font-size: 13px; color: var(--ink2); margin: 16px 0 0; text-align: center; }
