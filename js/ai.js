@@ -128,10 +128,13 @@ export async function maybeTrade(g, p) {
     return g.s.own[i].owner === null ? null : { k, i, holder: g.s.own[i].owner };
   }).filter(Boolean);
   for (const want of missingFor(p.id)) {
+    const q = g.s.players[want.holder];
+    // A bot asks a human for a given place only once per game. Between bots it can try again after 3 rounds.
+    const asked = `asked-${p.id}-${q.id}-${want.i}`;
+    if (q.human && g.s.memo[asked]) continue;
     const key = `${p.id}-${want.i}`;
     if (g.s.memo[key] && g.s.round - g.s.memo[key] < 3) continue;
     g.s.memo[key] = g.s.round;
-    const q = g.s.players[want.holder];
     const swap = missingFor(q.id).find((w) => w.holder === p.id);
     let t;
     if (swap) {
@@ -143,7 +146,7 @@ export async function maybeTrade(g, p) {
       t = { from: p.id, to: q.id, give: { props: [], cash: price, passes: 0 }, get: { props: [want.i], cash: 0, passes: 0 } };
     }
     if (!g.validTrade(t)) continue;
-    if (q.human) await g.proposeTrade(t);
+    if (q.human) { g.s.memo[asked] = 1; await g.proposeTrade(t); }
     else if (evaluateTrade(g, t)) g.applyTrade(t);
     return;
   }
