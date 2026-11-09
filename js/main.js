@@ -1,6 +1,6 @@
 import { TOKENS, BOT_NAMES, BOARD, isOwnable } from './data.js';
 import { Game, newState, loadSave, clearSave } from './engine.js';
-import { UI, sheet } from './ui.js';
+import { UI, sheet, getPace, setPace, SPEED_LABEL } from './ui.js';
 import { BoardView } from './board.js';
 import { tokenSVG, logoSVG, icon } from './art.js';
 import { sfx, unlock } from './audio.js';
@@ -106,6 +106,8 @@ function renderSetup() {
       <h3>Starting cash</h3>${seg('startCash', [[10000, '₱10,000'], [15000, '₱15,000'], [20000, '₱20,000']])}
       <h3>Game length</h3>${seg('rounds', [[0, 'Classic'], [30, '30 rounds'], [15, '15 rounds']])}
       <p class="opt-note">${setup.settings.rounds ? `After ${setup.settings.rounds} rounds the richest player wins.` : 'Play until one tycoon is left standing.'}</p>
+      <h3>Game speed</h3><div class="seg" id="s-pace">${['slow', 'normal', 'fast'].map((v) => `<button class="${getPace() === v ? 'on' : ''}" data-pace="${v}">${SPEED_LABEL[v]}</button>`).join('')}</div>
+      <p class="opt-note">How long dice tumble and tokens hop. You can change it any time from the menu.</p>
       <h3>House rules</h3>
       <label class="tog"><input type="checkbox" id="o-auc" ${setup.settings.auctions ? 'checked' : ''}><span class="sw"></span><span><b>Auctions</b><small>Lots nobody buys go to the highest bidder</small></span></label>
       <label class="tog"><input type="checkbox" id="o-pot" ${setup.settings.pot ? 'checked' : ''}><span class="sw"></span><span><b>Merienda pot</b><small>Taxes and fines pile up. Land on Merienda to grab them.</small></span></label>
@@ -152,9 +154,10 @@ function renderSetup() {
     renderSetup();
   });
   ui2.querySelectorAll('.prem').forEach((b) => b.onclick = () => { sfx.tap(); setup.players.splice(+b.dataset.k, 1); renderSetup(); });
-  ui2.querySelectorAll('.seg').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
+  ui2.querySelectorAll('.seg[data-key]').forEach((sg) => sg.querySelectorAll('button').forEach((b) => b.onclick = () => {
     sfx.tap(); setup.settings[sg.dataset.key] = JSON.parse(b.dataset.val); renderSetup();
   }));
+  ui2.querySelectorAll('[data-pace]').forEach((b) => b.onclick = () => { sfx.tap(); setPace(b.dataset.pace); renderSetup(); });
   $('#o-auc').onchange = (e) => { setup.settings.auctions = e.target.checked; };
   $('#o-pot').onchange = (e) => { setup.settings.pot = e.target.checked; };
 }

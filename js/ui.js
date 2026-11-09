@@ -13,6 +13,12 @@ let quiet = false; // no toasts while a phone fast-forwards through an online ga
 
 export const layer = () => $('#layer');
 
+// Game speed: how long dice tumble, tokens hop and CPUs think. Fast is the original pace.
+export const SPEEDS = { slow: 0.62, normal: 0.92, fast: 1.4 };
+export const SPEED_LABEL = { slow: 'Slow', normal: 'Normal', fast: 'Fast' };
+export function getPace() { try { const v = localStorage.getItem('pm-pace'); return SPEEDS[v] ? v : 'normal'; } catch { return 'normal'; } }
+export function setPace(v) { try { localStorage.setItem('pm-pace', v); } catch {} }
+
 // ---------- generic bottom sheet ----------
 export function sheet({ title = '', sub = '', body = '', actions = [], cls = '', dismiss = true, mount = null }) {
   return new Promise((resolve) => {
@@ -103,7 +109,7 @@ const diceFace = (n) => {
 const DIE_ROT = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 2: [90, 0] };
 
 export class UI {
-  constructor(root) { this.root = root; this.speed = 1.4; this._ff = false; try { this.speed = +localStorage.getItem('pm-speed') || 1.4; } catch {} }
+  constructor(root) { this.root = root; this.pace = getPace(); this.speed = SPEEDS[this.pace]; this._ff = false; }
 
   // Fast-forward: replay moves with no animation or sound, used when a phone rejoins an online game.
   get ff() { return this._ff; }
@@ -210,6 +216,8 @@ export class UI {
   async roll(p, dice, label = '') {
     if (this.ff) return;
     const box = $('#dice', this.root);
+    const rollT = (this.g.isLocal(p) ? 1400 : 1200) / this.speed;
+    box.style.setProperty('--rollT', `${rollT}ms`);
     box.classList.remove('settled'); box.classList.add('rolling');
     $('.dsum', box).textContent = label;
     sfx.dice();
@@ -218,17 +226,18 @@ export class UI {
       r[0] = Math.ceil(r[0] / 360) * 360 + 720 + ax; r[1] = Math.ceil(r[1] / 360) * 360 + 360 * (k + 1) + ay; r[2] = (Math.random() - 0.5) * 24;
       el.querySelector('.cube').style.transform = `rotateZ(${r[2]}deg) rotateX(${r[0]}deg) rotateY(${r[1]}deg)`;
     });
-    await sleep(this.g.isLocal(p) ? 1000 : 800);
+    await sleep(rollT);
     box.classList.remove('rolling'); box.classList.add('settled');
-    $('.dsum', box).innerHTML = `${dice[0] + dice[1]}${dice[0] === dice[1] ? ' <em>doubles!</em>' : ''}`;
+    $('.dsum', box).innerHTML = `<span>${dice[0] + dice[1]}</span>${dice[0] === dice[1] ? ' <em>doubles!</em>' : ''}`;
     sfx.land();
-    await this.pause(350);
+    await this.pause(450);
   }
 
   async animateMove(p, from, steps) {
     if (this.ff) return;
     await this.board.hop(p, from, steps, (k) => sfx.hop(k));
     sfx.land();
+    await this.pause(200);
   }
 
   async toJail(p) {
@@ -250,15 +259,42 @@ export class UI {
       setTimeout(() => f.remove(), 1400);
     }
     if (delta > 0 && why !== 'bankrupt') sfx.coin(); else if (delta < 0) sfx.pay();
+    if (why === 'salary' && !this.ff) this.board.burst(0, 'coins');
     this.renderHud();
     this.updatePot();
   }
 
-  onBuild(i, pid) { sfx.build(); if (!this.ff) this.board.pulseTile(i); this.render(); }
+  onBuild(i, pid, delta) {
+    sfx.build();
+    if (!this.ff) { this.board.pulseTile(i); if (delta < 0) this.board.burst(i, 'sparkle', '#ffd36e'); }
+    this.render();
+  }
+
+  // Coins fly from one player's chip to another's at the top of the screen.
+  flyCoins(fromPid, toPid) {
+    if (this.ff) return;
+    const a = $(`.chip[data-pid="${fromPid}"] .av`, this.root)?.getBoundingClientRect();
+    const b = $(`.chip[data-pid="${toPid}"] .av`, this.root)?.getBoundingClientRect();
+    if (!a || !b || !a.width || !b.width) return;
+    for (let k = 0; k < 6; k++) {
+      const c = document.createElement('i');
+      c.className = 'fly-coin'; c.textContent = '₱';
+      c.style.left = `${a.left + a.width / 2 - 11}px`; c.style.top = `${a.top + a.height / 2 - 11}px`;
+      layer().appendChild(c);
+      const dx = b.left - a.left, dy = b.top - a.top, lift = 70 + Math.random() * 40;
+      const anim = c.animate([
+        { transform: 'translate(0,0) scale(.4)', opacity: 0 },
+        { transform: `translate(${dx * 0.5 + (Math.random() - 0.5) * 30}px,${dy * 0.5 + lift}px) scale(1.15)`, opacity: 1, offset: 0.5 },
+        { transform: `translate(${dx}px,${dy}px) scale(.6)`, opacity: 0.9 },
+      ], { duration: 750 / Math.min(this.speed, 1.2), delay: k * 70, easing: 'cubic-bezier(.3,.6,.4,1)', fill: 'both' });
+      anim.onfinish = () => { c.remove(); if (k === 5) $(`.chip[data-pid="${toPid}"]`, this.root)?.classList.add('got'), setTimeout(() => $(`.chip[data-pid="${toPid}"]`, this.root)?.classList.remove('got'), 500); };
+    }
+  }
   onTrade(t) { sfx.good(); this.render(); toast(`🤝 Deal between ${first(this.g.s.players[t.from].name)} and ${first(this.g.s.players[t.to].name)}!`, 'good'); }
 
   async rentNotice(p, owner, i, rent) {
     this.board.pulseTile(i, 'flash-rent');
+    if (!this.ff) { this.board.burst(i, 'coins'); this.flyCoins(p.id, owner.id); }
     toast(`<span class="dotc" style="--pc:${p.color}"></span>${first(p.name)} pays <b>${peso(rent)}</b> rent to ${first(owner.name)}`, 'warn');
     await this.pause(650);
   }
@@ -293,6 +329,7 @@ export class UI {
   async onBought(p, i) {
     sfx.buy();
     this.board.pulseTile(i, 'bought');
+    if (!this.ff) this.board.burst(i, 'sparkle', p.color);
     this.render();
     toast(`<span class="dotc" style="--pc:${p.color}"></span>${first(p.name)} bought <b>${esc(BOARD[i].name)}</b>`, 'good');
     await this.pause(600);
@@ -302,6 +339,7 @@ export class UI {
     if (this.ff) return;
     const tap = this.g.isLocal(p);
     sfx.card();
+    if (deck === 'swerte') this.board.burst(p.pos, 'stars', '#ffd36e');
     const w = document.createElement('div');
     w.className = 'card-pop';
     w.innerHTML = `<div class="card ${deck}"><div class="card-head">${deckArt(deck)}<b>${deck === 'swerte' ? 'Swerte' : 'Bayanihan'}</b></div>
@@ -553,12 +591,11 @@ export class UI {
   }
 
   openMenu() {
-    const sp = this.speed;
     sheet({
       title: this.online ? `Room ${esc(this.g.sync.code)}` : 'Paused', sub: `Round ${this.g.s.round}${this.g.s.settings.rounds ? ` of ${this.g.s.settings.rounds}` : ''} · ${this.online ? 'the game keeps going while this menu is open' : 'your game saves every turn'}`,
       body: `<div class="menu-list">
         <button class="menu-item" data-m="sound">${icon(isMuted() ? 'mute' : 'sound')}<span>Sound</span><em>${isMuted() ? 'Off' : 'On'}</em></button>
-        <button class="menu-item" data-m="speed">${icon('speed')}<span>CPU speed</span><em>${sp > 2 ? 'Fast' : 'Normal'}</em></button>
+        <button class="menu-item" data-m="speed">${icon('speed')}<span>Game speed</span><em>${SPEED_LABEL[this.pace]}</em></button>
         <button class="menu-item" data-m="log">${icon('log')}<span>Game log</span><em></em></button>
         <button class="menu-item" data-m="rules">${icon('book')}<span>How to play</span><em></em></button>
         <button class="menu-item danger" data-m="quit">${icon('home')}<span>${this.online ? 'Leave room' : 'Save and quit'}</span><em>${this.online ? 'Rejoin from home' : ''}</em></button></div>`,
@@ -568,7 +605,12 @@ export class UI {
         sfx.tap();
         const m = b.dataset.m;
         if (m === 'sound') { setMuted(!isMuted()); b.querySelector('em').textContent = isMuted() ? 'Off' : 'On'; b.querySelector('.ic').outerHTML = icon(isMuted() ? 'mute' : 'sound'); }
-        if (m === 'speed') { this.speed = this.speed > 2 ? 1.4 : 2.6; this.board.speed = this.speed; try { localStorage.setItem('pm-speed', this.speed); } catch {} b.querySelector('em').textContent = this.speed > 2 ? 'Fast' : 'Normal'; }
+        if (m === 'speed') {
+          const order = ['slow', 'normal', 'fast'];
+          this.pace = order[(order.indexOf(this.pace) + 1) % 3]; setPace(this.pace);
+          this.speed = SPEEDS[this.pace]; this.board.speed = this.speed;
+          b.querySelector('em').textContent = SPEED_LABEL[this.pace];
+        }
         if (m === 'log') { close(); this.openLog(); }
         if (m === 'rules') { close(); this.hooks.rules(); }
         if (m === 'quit') { close(); this.hooks.quit(); }

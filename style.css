@@ -515,3 +515,61 @@ input { font: inherit; -webkit-user-select: text; user-select: text; }
 .net-pill.down i { background: var(--red); animation: dot 1s infinite; }
 .wait-deal { text-align: center; padding: 4px 0 12px; color: var(--ink2); }
 @media (max-width: 380px) { .room-code span { width: 42px; height: 52px; font-size: 28px; } }
+
+/* ---------- life and little effects ---------- */
+.center-map.life { pointer-events: none; }
+.sprite.sway svg { transform-origin: 50% 96%; animation: sway 4.6s ease-in-out var(--d, 0s) infinite alternate; }
+.sprite.sway.soft svg { animation-duration: 6s; }
+@keyframes sway { from { transform: rotate(-2.6deg); } to { transform: rotate(2.6deg); } }
+.sprite.sway.soft svg { animation-name: swaysoft; }
+@keyframes swaysoft { from { transform: rotate(-1.2deg) scaleY(.99); } to { transform: rotate(1.2deg) scaleY(1.01); } }
+.sprite.bob svg { animation: logobob 3.4s ease-in-out infinite; }
+@keyframes logobob { 50% { transform: translateY(-7px); } }
+.blink { animation: beacon 2.2s steps(1) infinite; }
+@keyframes beacon { 0%, 60% { opacity: 0; } 61%, 100% { opacity: .55; } }
+.eyes { transform-box: fill-box; transform-origin: 50% 50%; animation: blinkeye 5s infinite; }
+.token:nth-child(2n) .eyes { animation-delay: -1.7s; } .token:nth-child(3n) .eyes { animation-delay: -3.1s; }
+@keyframes blinkeye { 0%, 93%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+
+/* tokens: the one whose turn it is breathes; landing squashes */
+.token.active:not(.hopping) .hop svg { transform-origin: 50% 92%; animation: breathe 1.8s ease-in-out infinite; }
+@keyframes breathe { 50% { transform: scale(1.04, .96); } }
+.token.landed .hop { animation: land .5s var(--ease-pop); }
+@keyframes land { 0% { transform: scale(1.25, .7); } 50% { transform: scale(.92, 1.12) translateY(-6px); } 100% { transform: none; } }
+.token .cnt { position: absolute; left: 50%; top: -44px; min-width: 30px; height: 30px; padding: 0 6px; translate: -50% 0; border-radius: 99px; display: grid; place-items: center;
+  background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--pc, var(--ink)); font: 700 18px/1 var(--display); color: var(--ink); opacity: 0; transform: scale(.4); transition: opacity .15s, transform .2s; }
+.token .cnt.tick { opacity: 1; animation: tick .3s var(--ease-pop); transform: none; }
+@keyframes tick { 0% { transform: scale(1.5); } 100% { transform: scale(1); } }
+.token.hopping .ring, .token:has(.cnt.tick) .ring { visibility: hidden; }
+
+.fx { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-style: preserve-3d; pointer-events: none; z-index: 6; }
+.fx .bb { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.puff i { position: absolute; left: -9px; top: -8px; width: 18px; height: 14px; border-radius: 50%; background: #fffaf0; border: 2px solid #e6d4b4; animation: puff .55s ease-out forwards; }
+.puff i:nth-child(1) { --px: -22px; } .puff i:nth-child(2) { --px: 22px; } .puff i:nth-child(3) { --px: 0px; --py: -10px; }
+@keyframes puff { 0% { transform: translate(0, 0) scale(.3); opacity: .9; } 100% { transform: translate(var(--px), var(--py, -4px)) scale(1.1); opacity: 0; } }
+.burst i { position: absolute; left: -12px; top: -40px; width: 24px; height: 24px; display: grid; place-items: center; font: 700 22px/1 var(--display); color: var(--c);
+  text-shadow: 0 0 0 var(--ink), 1.5px 1.5px 0 var(--ink), -1.5px -1.5px 0 var(--ink), 1.5px -1.5px 0 var(--ink), -1.5px 1.5px 0 var(--ink);
+  animation: pop-up 1.25s cubic-bezier(.2, .8, .3, 1) var(--d) both; }
+.burst.coins i b { width: 24px; height: 24px; border-radius: 50%; background: #f8cf55; border: 2.5px solid var(--ink); display: grid; place-items: center; font: 800 13px/1 'Nunito'; color: #8a5a12; text-shadow: none; box-shadow: inset 0 -3px 0 #e2a92e; }
+@keyframes pop-up { 0% { transform: translate(0, 10px) scale(.2) rotate(0); opacity: 0; } 25% { opacity: 1; transform: translate(calc(var(--x) * .6), var(--y)) scale(1.15) rotate(10deg); }
+  70% { opacity: 1; } 100% { transform: translate(var(--x), calc(var(--y) + 30px)) scale(.8) rotate(-12deg); opacity: 0; } }
+.ripple { position: absolute; width: 0; height: 0; pointer-events: none; }
+.ripple::before { content: ''; position: absolute; left: -40px; top: -40px; width: 80px; height: 80px; border-radius: 50%; border: 4px solid var(--pc); opacity: 0; animation: ripple .85s ease-out; }
+@keyframes ripple { 0% { transform: scale(.2); opacity: .9; } 100% { transform: scale(1.3); opacity: 0; } }
+
+.fly-coin { position: fixed; z-index: 60; width: 22px; height: 22px; border-radius: 50%; background: #f8cf55; border: 2.5px solid var(--ink); box-shadow: inset 0 -3px 0 #e2a92e;
+  display: grid; place-items: center; font: 800 12px/1 'Nunito'; color: #8a5a12; pointer-events: none; font-style: normal; }
+.chip.got { animation: gotcash .5s var(--ease-pop); }
+@keyframes gotcash { 40% { transform: scale(1.1); } }
+
+/* dice take as long as the game speed says */
+#dice.rolling .die { animation-duration: var(--rollT, 1s); }
+#dice .cube { transition-duration: var(--rollT, 1s); }
+.dsum span { display: inline-block; animation: sumpop .45s var(--ease-pop); }
+@keyframes sumpop { 0% { transform: scale(.2); } 100% { transform: scale(1); } }
+#dice.settled { animation-delay: 1.9s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sprite.sway svg, .sprite.bob svg, .eyes, .blink, .token.active .hop svg, .burst i, .puff i { animation: none !important; }
+  .burst, .puff { display: none; }
+}

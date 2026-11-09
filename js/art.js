@@ -1,5 +1,5 @@
 // All artwork is drawn here as SVG, in a soft hand-inked isometric style.
-import { GROUPS } from './data.js';
+import { GROUPS, CCW } from './data.js';
 
 export const C = {
   ink: '#4a3428', cream: '#fdf6e6', wall: '#f5e4c8', wallSh: '#dfc6a0', roof: '#c4684b',
@@ -68,7 +68,7 @@ export function building(o) {
     out.push(poly([P(2.5, 2.5, h), P(w - 2.5, 2.5, h), P(w - 2.5, d - 2.5, h), P(2.5, d - 2.5, h)], shade(roof, -0.12), 'stroke="none"'));
     if (type === 'antenna') {
       const a = P(w / 2, d / 2, h), b = P(w / 2, d / 2, h + 16);
-      out.push(`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${ink}" stroke-width="2"/><circle cx="${b[0]}" cy="${b[1]}" r="2.6" fill="${accent || '#e2584f'}"/>`);
+      out.push(`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${ink}" stroke-width="2"/><circle cx="${b[0]}" cy="${b[1]}" r="2.6" fill="${accent || '#e2584f'}"/><circle class="blink" cx="${b[0]}" cy="${b[1]}" r="5" fill="#ff7a6b" opacity=".0" stroke="none"/>`);
     }
     if (type === 'helipad') {
       const c = P(w / 2, d / 2, h);
@@ -132,14 +132,14 @@ export function palm(s = 1) {
 // ---------- tokens ----------
 const face = (x, y, s = 1, blush = '#f59b9b') => `
   <g transform="translate(${x} ${y}) scale(${s})" stroke="none">
-    <ellipse cx="-7" cy="0" rx="2.3" ry="2.9" fill="${C.ink}"/><ellipse cx="7" cy="0" rx="2.3" ry="2.9" fill="${C.ink}"/>
-    <circle cx="-6.3" cy="-1" r=".8" fill="#fff"/><circle cx="7.7" cy="-1" r=".8" fill="#fff"/>
+    <g class="eyes"><ellipse cx="-7" cy="0" rx="2.3" ry="2.9" fill="${C.ink}"/><ellipse cx="7" cy="0" rx="2.3" ry="2.9" fill="${C.ink}"/>
+    <circle cx="-6.3" cy="-1" r=".8" fill="#fff"/><circle cx="7.7" cy="-1" r=".8" fill="#fff"/></g>
     <ellipse cx="-12" cy="5" rx="3.6" ry="2.2" fill="${blush}" opacity=".85"/><ellipse cx="12" cy="5" rx="3.6" ry="2.2" fill="${blush}" opacity=".85"/>
     <path d="M-3,4 Q0,7 3,4" fill="none" stroke="${C.ink}" stroke-width="1.6" stroke-linecap="round"/></g>`;
 
 const JEEP_SIGN = (x) => `<text x="${x}" y="25.6" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Fredoka,sans-serif" fill="${C.ink}" stroke="none">MANILA</text>`;
-// Vehicles are drawn facing right but always drive right to left on screen, so the token mirrors them.
-const VEHICLES = new Set(['jeepney', 'trike']);
+// Vehicles are drawn facing right. Played clockwise they drive right to left on screen, so the token mirrors them.
+const VEHICLES = new Set(CCW ? [] : ['jeepney', 'trike']);
 
 const TOKEN_ART = {
   jeepney: `
@@ -283,10 +283,14 @@ export function cornerSVG(type) {
   if (type === 'start') return wrap(`
     <rect x="0" y="0" width="140" height="140" fill="#ffe7a8" stroke="none"/>
     <g opacity=".5" stroke="none" fill="#ffd36e">${Array.from({ length: 12 }, (_, k) => `<path d="M70,70 L${70 + 110 * Math.cos((k * 30 - 4) * Math.PI / 180)},${70 + 110 * Math.sin((k * 30 - 4) * Math.PI / 180)} L${70 + 110 * Math.cos((k * 30 + 8) * Math.PI / 180)},${70 + 110 * Math.sin((k * 30 + 8) * Math.PI / 180)} Z"/>`).join('')}</g>
-    <circle cx="70" cy="56" r="24" fill="#ffcf6b"/>${face(70, 56, 1.15)}
+    ${CCW ? `<circle cx="70" cy="50" r="24" fill="#ffcf6b"/>${face(70, 50, 1.15)}
+    ${T(70, 95, 25, 'SIMULA', C.ink)}
+    ${T(70, 112, 11.5, 'collect ₱2,000 sweldo', C.ink, 'font-weight="600"')}
+    <path d="M10,129 L60,129" stroke="#e2584f" stroke-width="7"/><path d="M50,120 L64,129 L50,138" fill="none" stroke="#e2584f" stroke-width="7"/>`
+    : `<circle cx="70" cy="56" r="24" fill="#ffcf6b"/>${face(70, 56, 1.15)}
     ${T(70, 102, 25, 'SIMULA', C.ink)}
     ${T(70, 120, 11.5, 'collect ₱2,000 sweldo', C.ink, 'font-weight="600"')}
-    <path d="M14,132 L14,84" stroke="#e2584f" stroke-width="7"/><path d="M5,94 L14,80 L23,94" fill="none" stroke="#e2584f" stroke-width="7"/>`);
+    <path d="M14,132 L14,84" stroke="#e2584f" stroke-width="7"/><path d="M5,94 L14,80 L23,94" fill="none" stroke="#e2584f" stroke-width="7"/>`}`);
   if (type === 'jail') return wrap(`
     <rect x="0" y="0" width="140" height="140" fill="#f7efe0" stroke="none"/>
     <rect x="34" y="0" width="106" height="106" fill="#f6b2a0" stroke="none"/>
@@ -401,6 +405,78 @@ export function centerMapSVG() {
   </g></svg>`;
 }
 
+// Things that move around the board centre: jeepneys on the roads, a bangka on the bay, ferries on the
+// Pasig, birds, butterflies, drifting petals and cloud shadows. Same 720 x 720 map coordinates as above.
+export function centerLifeSVG() {
+  const ink = C.ink;
+  const R1 = 'M150,470 C300,430 420,470 560,420 C620,398 670,360 720,350';
+  const R2 = 'M470,-20 C455,90 500,150 480,236';
+  const R3 = 'M440,740 C450,640 410,560 430,452';
+  const fade = (dur, begin) => `<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.08;.9;1" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>`;
+  // something driving along a path; back = drives the path in reverse
+  const drive = (art, path, dur, begin, { back = false, dx = 0, dy = 0 } = {}) => `<g transform="translate(${dx} ${dy})"><g opacity="0">
+      <animateMotion path="${path}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite" rotate="${back ? 'auto-reverse' : 'auto'}" ${back ? 'keyPoints="1;0" keyTimes="0;1" calcMode="linear"' : ''}/>
+      ${fade(dur, begin)}<g transform="scale(1.5)">${art}</g></g></g>`;
+  const jeep = (body, roof = '#fdf6e6') => `<g stroke="${ink}" stroke-width="1.6" stroke-linejoin="round">
+      <rect x="-12" y="-5" width="26" height="13" rx="3" fill="${ink}" opacity=".15" stroke="none"/>
+      <rect x="-14" y="-7" width="27" height="13" rx="3.5" fill="${body}"/>
+      <rect x="-10" y="-4.5" width="15" height="8" rx="2" fill="${roof}"/>
+      <path d="M-7,-4.5 v8 M-3,-4.5 v8 M1,-4.5 v8" stroke="${body}" stroke-width="1.4"/>
+      <rect x="7" y="-5" width="4" height="9" rx="1.5" fill="${C.glass}"/><circle cx="13" cy="-4" r="1.3" fill="#fff7c2" stroke="none"/><circle cx="13" cy="3" r="1.3" fill="#fff7c2" stroke="none"/></g>`;
+  const trike = (body) => `<g stroke="${ink}" stroke-width="1.5" stroke-linejoin="round">
+      <rect x="-9" y="-6" width="12" height="12" rx="3" fill="${body}"/><rect x="3" y="-2.5" width="9" height="5" rx="2" fill="#4b4444"/>
+      <circle cx="12" cy="0" r="1.6" fill="#fff7c2" stroke="none"/></g>`;
+  const bangka = `<g stroke="${ink}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+      <path d="M-22,0 l-10,-5 M-22,0 l-10,5" stroke="#fff" stroke-width="2" opacity=".85"/>
+      <path d="M-7,-12 L9,-12 M-7,12 L9,12" stroke="${C.wood}" stroke-width="2.6"/>
+      <path d="M-3,-3 L-3,-12 M5,-3 L5,-12 M-3,3 L-3,12 M5,3 L5,12" stroke="${C.woodD}"/>
+      <path d="M-18,0 Q-6,-8 18,0 Q-6,8 -18,0 Z" fill="#f2c443"/><path d="M-10,0 L10,0" stroke="#e2584f" stroke-width="2"/>
+      <g><animateTransform attributeName="transform" type="rotate" values="-6;6;-6" dur="3.2s" repeatCount="indefinite"/>
+        <path d="M-2,-1 L-2,-15 L8,-3 Z" fill="#fdf6e6"/></g></g>`;
+  const ferry = `<g stroke="${ink}" stroke-width="1.5" stroke-linejoin="round">
+      <path d="M-20,0 l-9,-4 M-20,0 l-9,4" stroke="#fff" stroke-width="2" opacity=".85"/>
+      <path d="M-16,-7 L10,-7 Q18,0 10,7 L-16,7 Z" fill="#fdf6e6"/><rect x="-11" y="-4" width="14" height="8" rx="2" fill="#4a86d6"/>
+      <path d="M-8,-4 v8 M-4,-4 v8 M0,-4 v8" stroke="#fdf6e6" stroke-width="1.2"/></g>`;
+  const bird = (k) => `<g transform="translate(${[0, 16, 10][k]} ${[0, 12, -14][k]})">
+      <path d="M-7,6 Q-3,2 0,6 Q3,2 7,6" fill="none" stroke="${ink}" stroke-width="2" opacity=".14" transform="translate(10 26)"/>
+      <path fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round" d="M-8,0 Q-4,-6 0,0 Q4,-6 8,0">
+        <animate attributeName="d" values="M-8,0 Q-4,-6 0,0 Q4,-6 8,0;M-8,0 Q-4,4 0,0 Q4,4 8,0;M-8,0 Q-4,-6 0,0 Q4,-6 8,0" dur="${0.5 + k * 0.07}s" repeatCount="indefinite"/></path></g>`;
+  const butterfly = (color, path, dur, begin) => `<g><animateMotion path="${path}" dur="${dur}s" begin="${begin}s" repeatCount="indefinite" rotate="auto"/>
+      <g stroke="${ink}" stroke-width="1.2"><g><animateTransform attributeName="transform" type="scale" values="1 1;1 .25;1 1" dur=".32s" repeatCount="indefinite"/>
+        <path d="M0,0 C-4,-9 -10,-8 -8,-2 Z M0,0 C4,-9 10,-8 8,-2 Z" fill="${color}" transform="rotate(90)"/>
+        <path d="M0,0 C-4,9 -10,8 -8,2 Z M0,0 C4,9 10,8 8,2 Z" fill="${color}" transform="rotate(90)"/></g>
+        <ellipse rx="4" ry="1.4" fill="${ink}" stroke="none"/></g></g>`;
+  const petal = (x, dur, begin) => `<g opacity="0"><animateMotion path="M${x},-20 C${x + 60},140 ${x - 40},300 ${x + 70},460 C${x + 140},560 ${x + 60},660 ${x + 120},760" dur="${dur}s" begin="${begin}s" repeatCount="indefinite"/>
+      ${fade(dur, begin)}<g><animateTransform attributeName="transform" type="rotate" values="0;360" dur="${dur / 4}s" repeatCount="indefinite"/>
+      <ellipse rx="5" ry="3" fill="${C.blossom}" stroke="${ink}" stroke-width="1"/></g></g>`;
+  const plop = (x, y, begin) => `<g transform="translate(${x} ${y})" fill="none" stroke="#fff" stroke-width="2">
+      ${[0, 0.35].map((d) => `<ellipse rx="2" ry="1" opacity="0"><animate attributeName="rx" values="2;20" dur="2s" begin="${begin + d}s" repeatCount="indefinite"/><animate attributeName="ry" values="1;8" dur="2s" begin="${begin + d}s" repeatCount="indefinite"/><animate attributeName="opacity" values=".9;0" dur="2s" begin="${begin + d}s" repeatCount="indefinite"/></ellipse>`).join('')}</g>`;
+  const sparkle = (x, y, begin) => `<path d="M${x - 6},${y} q3,-3 6,0 t6,0" fill="none" stroke="#fff" stroke-width="2" opacity="0"><animate attributeName="opacity" values="0;.9;0" dur="2.6s" begin="${begin}s" repeatCount="indefinite"/></path>`;
+  return `<svg viewBox="0 0 720 720" xmlns="http://www.w3.org/2000/svg" class="center-life" overflow="hidden">
+    <!-- cloud shadows -->
+    <g fill="${ink}" opacity=".07">
+      <ellipse rx="110" ry="46"><animateMotion path="M-160,140 L880,560" dur="64s" begin="-20s" repeatCount="indefinite"/></ellipse>
+      <ellipse rx="80" ry="34"><animateMotion path="M-140,520 L880,40" dur="80s" begin="-55s" repeatCount="indefinite"/></ellipse>
+    </g>
+    ${sparkle(260, 266, 0)}${sparkle(560, 246, 1.1)}${sparkle(640, 224, 2)}${sparkle(380, 286, 1.6)}
+    ${plop(60, 160, 0)}${plop(40, 430, 3.1)}${plop(80, 640, 5.7)}
+    ${drive(bangka, 'M62,-40 C104,150 40,330 86,470 C112,580 60,660 76,770', 52, -10)}
+    ${drive(ferry, 'M740,229 C660,224 610,259 515,255', 18, -4)}
+    ${drive(ferry, 'M450,268 C430,284 340,273 300,270 C262,266 222,306 120,323', 20, -13)}
+    ${drive(jeep('#e2584f'), R1, 15, -2, { dy: -9 })}
+    ${drive(jeep('#f2c443', '#fff'), R1, 18, -9, { back: true, dy: 9 })}
+    ${drive(trike('#4a86d6'), R1, 23, -15, { dy: -9 })}
+    ${drive(jeep('#5fb46a'), R2, 9, -3, { back: true, dx: 8 })}
+    ${drive(jeep('#9b7ed8'), R3, 10, -6, { back: true, dx: -8 })}
+    ${drive(trike('#e2584f'), R3, 12, -1, { dx: 8 })}
+    ${butterfly('#f2c443', 'M600,96 C640,70 680,120 640,150 C600,180 560,130 600,96 Z', 7, 0)}
+    ${butterfly('#f7a9a4', 'M300,610 C340,590 360,650 320,670 C280,690 250,630 300,610 Z', 8, -3)}
+    ${butterfly('#a4dfe7', 'M640,440 C680,420 700,480 660,500 C620,520 600,460 640,440 Z', 9, -5)}
+    ${petal(160, 24, 0)}${petal(380, 28, -9)}${petal(540, 22, -15)}${petal(260, 30, -21)}
+    <g><animateMotion path="M-120,640 L1500,-560" dur="34s" begin="-6s" repeatCount="indefinite"/>${bird(0)}${bird(1)}${bird(2)}</g>
+  </svg>`;
+}
+
 // Standing paper-cutout sprites placed on the board centre (board coordinates).
 export function centerSprites() {
   const B = (o, x, y, s = 1) => ({ ...building(o), x, y, s });
@@ -421,9 +497,9 @@ export function centerSprites() {
     B({ w: 52, d: 22, h: 20, type: 'cren', win: 'stone', wall: '#d8c7a6' }, 330, 360),
     B({ w: 30, d: 28, h: 26, roof: '#ee93b4', rh: 14, win: 'house' }, 560, 210),
     B({ w: 28, d: 24, h: 22, roof: '#f3a24f', rh: 12, win: 'house' }, 600, 180),
-    T(palm(), 300, 520), T(palm(), 300, 640), T(palm(), 290, 780),
-    T(tree(), 820, 690), T(tree(), 520, 820),
-    { svg: logoSVG(), w: 300, h: 125, x: 470, y: 555, s: 1, logo: true },
+    { ...T(palm(), 300, 520), anim: 'sway' }, { ...T(palm(), 300, 640), anim: 'sway' }, { ...T(palm(), 290, 780), anim: 'sway' },
+    { ...T(tree(), 820, 690), anim: 'sway soft' }, { ...T(tree(), 520, 820), anim: 'sway soft' },
+    { svg: logoSVG(), w: 300, h: 125, x: 470, y: 555, s: 1, logo: true, anim: 'bob' },
   ];
 }
 

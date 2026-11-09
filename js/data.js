@@ -58,6 +58,8 @@ export const BOARD = [
 ];
 
 export const SALARY = 2000;
+// Tokens go round the board counter-clockwise: Simula is bottom-left and play heads right along the bottom row.
+export const CCW = true;
 export const JAIL_POS = 10;
 export const JAIL_FINE = 500;
 export const STATION_RENT = [250, 500, 1000, 2000];

@@ -57,6 +57,7 @@ export class Sync {
   acts() { let a = this.buf.get(this.k); if (!a) this.buf.set(this.k, (a = [])); return a; }
 
   push(e) {
+    if (this.dead) return; // a replaced copy of the game must never write to the room
     const a = this.acts();
     a.push(e); this.i = a.length;
     this.conn.state({ v: 1, ...this.info, phase: 'game', game: { tn: this.snapTn, snap: this.snap, acts: a } });

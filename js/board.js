@@ -1,11 +1,13 @@
 // The 3D board: tiles on a tilted plane, standing paper-cutout tokens and sprites,
 // and a camera that follows the active token around the corners.
-import { BOARD, GROUPS, JAIL_POS, peso } from './data.js';
-import { tileIcon, cornerSVG, centerMapSVG, centerSprites, tokenSVG, C } from './art.js';
+import { BOARD, GROUPS, JAIL_POS, CCW, peso } from './data.js';
+import { tileIcon, cornerSVG, centerMapSVG, centerLifeSVG, centerSprites, tokenSVG, C } from './art.js';
 
 export const BW = 1000, CW = 140, TW = 80;
+const DIR = CCW ? 1 : -1; // which way the camera turns at each corner
 
-export function tileRect(i) {
+// Clockwise layout: Simula bottom-right, play heads left. Counter-clockwise is its mirror image.
+function cwRect(i) {
   if (i === 0) return { x: 860, y: 860, w: CW, h: CW, rot: 270, corner: true };
   if (i < 10) return { x: 860 - i * TW, y: 860, w: TW, h: CW, rot: 0 };
   if (i === 10) return { x: 0, y: 860, w: CW, h: CW, rot: 0, corner: true };
@@ -15,6 +17,14 @@ export function tileRect(i) {
   if (i === 30) return { x: 860, y: 0, w: CW, h: CW, rot: 180, corner: true };
   return { x: 860, y: 140 + (i - 31) * TW, w: CW, h: TW, rot: 270 };
 }
+export function tileRect(i) {
+  const r = cwRect(i);
+  if (!CCW) return r;
+  // Mirror left to right. Tiles keep facing the centre; corners turn so their inside corner still points inward.
+  const rot = r.corner ? ((4 - i / 10) % 4) * 90 : [0, 270, 180, 90][Math.floor(i / 10)];
+  return { ...r, x: BW - r.x - r.w, rot };
+}
+const OUTWARD = CCW ? [[0, 1], [1, 0], [0, -1], [-1, 0]] : [[0, 1], [-1, 0], [0, -1], [1, 0]];
 const sideOf = (i) => (i % 10 === 0 ? (i / 10 + 3) % 4 : Math.floor(i / 10));
 const center = (i) => { const r = tileRect(i); return { x: r.x + r.w / 2, y: r.y + r.h / 2 }; };
 // point in a corner's canonical frame (inward = top-right) -> board coords
@@ -46,18 +56,21 @@ export class BoardView {
     this.stage.innerHTML = `<div class="sky"><i class="cloud c1"></i><i class="cloud c2"></i><i class="cloud c3"></i></div><div class="cam"><div class="plane"></div></div>`;
     this.cam = this.stage.querySelector('.cam');
     this.plane = this.stage.querySelector('.plane');
-    const html = [`<div class="slab"></div><div class="center-map" style="left:${CW}px;top:${CW}px">${centerMapSVG()}</div>`];
+    const html = [`<div class="slab"></div><div class="center-map" style="left:${CW}px;top:${CW}px">${centerMapSVG()}</div>`,
+      `<div class="center-map life" style="left:${CW}px;top:${CW}px">${centerLifeSVG()}</div>`];
     for (let i = 0; i < 40; i++) html.push(this.tileHTML(i));
     this.plane.innerHTML = html.join('');
     this.sprites = centerSprites().map((s) => {
       const el = document.createElement('div');
-      el.className = 'sprite' + (s.logo ? ' logo-sprite' : '');
+      el.className = 'sprite' + (s.logo ? ' logo-sprite' : '') + (s.anim ? ` ${s.anim}` : '');
+      if (s.anim) el.style.setProperty('--d', `${(-Math.random() * 5).toFixed(2)}s`);
       el.style.cssText = `width:${s.w * s.s}px;height:${s.h * s.s}px;transform:translate3d(${s.x - (s.w * s.s) / 2}px,${s.y - s.h * s.s}px,0)`;
       el.innerHTML = `<div class="bb">${s.svg}</div>`;
       this.plane.appendChild(el);
       return el;
     });
     this.tokens = new Map();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) this.plane.querySelector('.life svg')?.pauseAnimations?.();
     this.plane.addEventListener('click', (e) => {
       const t = e.target.closest('.tile');
       if (t && this.opts.onTile) this.opts.onTile(+t.dataset.i);
@@ -107,7 +120,7 @@ export class BoardView {
       if (!el) {
         el = document.createElement('div');
         el.className = 'token';
-        el.innerHTML = `<div class="bb"><div class="hop">${tokenSVG(p.token)}<i class="ring" style="--pc:${p.color}"></i></div></div>`;
+        el.innerHTML = `<div class="bb"><div class="hop">${tokenSVG(p.token)}<i class="ring" style="--pc:${p.color}"></i></div><b class="cnt" style="--pc:${p.color}"></b></div>`;
         this.plane.appendChild(el);
         this.tokens.set(p.id, el);
       }
@@ -123,7 +136,7 @@ export class BoardView {
     const k = Math.max(0, here.findIndex((q) => q.id === p.id)), n = Math.max(1, here.length);
     let c = center(pos);
     if (pos === JAIL_POS) c = jailed ? cornerPoint(pos, 88, 52) : cornerPoint(pos, 30, 112);
-    else if (pos % 10) { const o = [[0, 1], [-1, 0], [0, -1], [1, 0]][Math.floor(pos / 10)]; c = { x: c.x + o[0] * 24, y: c.y + o[1] * 24 }; }
+    else if (pos % 10) { const o = OUTWARD[Math.floor(pos / 10)]; c = { x: c.x + o[0] * 24, y: c.y + o[1] * 24 }; }
     if (n === 1) return c;
     const ang = (k / n) * Math.PI * 2 + 0.6, rad = pos % 10 === 0 ? 26 : 19;
     return { x: c.x + Math.cos(ang) * rad, y: c.y + Math.sin(ang) * rad * 0.85 };
@@ -159,7 +172,7 @@ export class BoardView {
       fx = pt.x + (BW / 2 - pt.x) * 0.24; fy = pt.y + (BW / 2 - pt.y) * 0.24; oy = this.sheetOpen ? -vh * 0.3 : vh * (vh > vw ? 0.22 : 0.1);
     }
     // shortest way round to the target side
-    const target = -90 * side;
+    const target = DIR * 90 * side;
     let d = ((target - this.rz) % 360 + 540) % 360 - 180;
     this.rz += d;
     const root = this.stage;
@@ -177,23 +190,62 @@ export class BoardView {
   wait(ms) { return new Promise((r) => setTimeout(r, ms / this.speed)); }
 
   async hop(p, from, steps, sfx) {
-    const el = this.tokens.get(p.id);
+    const el = this.tokens.get(p.id), cnt = el.querySelector('.cnt');
     el.dataset.moving = '1';
+    el.classList.remove('landed');
     const dir = Math.sign(steps), n = Math.abs(steps);
-    const per = n > 14 ? 120 : 210;
-    el.style.setProperty('--hopT', per / this.speed + 'ms');
+    const base = n > 14 ? 130 : 230;
     for (let k = 1; k <= n; k++) {
+      // the last couple of hops slow down a little, for suspense
+      const left = n - k, per = (base * (left === 0 ? 1.5 : left === 1 ? 1.25 : 1)) / this.speed;
+      el.style.setProperty('--hopT', per + 'ms');
       const pos = (from + dir * k + 40) % 40;
       const pt = this.slot(p, pos, false);
       el.classList.remove('hopping'); void el.offsetWidth; el.classList.add('hopping');
+      if (n > 1) { cnt.textContent = left || ''; cnt.classList.remove('tick'); void cnt.offsetWidth; cnt.classList.toggle('tick', left > 0); }
       this.setTokenPos(p.id, pt);
-      if (this.mode === 'follow') { this.focusPid = p.id; this.focusPos = pos; this.applyCamera(false, per * 1.6 / this.speed); }
+      if (this.mode === 'follow') { this.focusPid = p.id; this.focusPos = pos; this.applyCamera(false, per * 1.6); }
       sfx?.(k, n);
-      await this.wait(per);
+      await this.wait(per * this.speed * 0.82);
+      this.puff(pt);
+      await this.wait(per * this.speed * 0.18);
     }
-    el.classList.remove('hopping');
+    cnt.classList.remove('tick'); cnt.textContent = '';
+    el.classList.remove('hopping'); void el.offsetWidth; el.classList.add('landed');
+    this.ripple((from + steps + 40) % 40, p.color);
     delete el.dataset.moving;
     this.focusPos = null;
+  }
+
+  // ---------- little effects on the board ----------
+  fx(pt, cls, html, ms) {
+    const el = document.createElement('div');
+    el.className = `fx ${cls}`;
+    el.style.transform = `translate3d(${pt.x}px,${pt.y}px,0)`;
+    el.innerHTML = `<div class="bb">${html}</div>`;
+    this.plane.appendChild(el);
+    setTimeout(() => el.remove(), ms);
+    return el;
+  }
+  puff(pt) {
+    this.fx(pt, 'puff', '<i></i><i></i><i></i>', 600);
+  }
+  ripple(i, color) {
+    const c = center(i), el = document.createElement('div');
+    el.className = 'ripple';
+    el.style.cssText = `left:${c.x}px;top:${c.y}px;--pc:${color || '#fff'}`;
+    this.plane.appendChild(el);
+    setTimeout(() => el.remove(), 900);
+  }
+  // A burst of coins, sparkles, stars or hearts popping up from a tile.
+  burst(i, kind = 'sparkle', color = '#f2c443') {
+    const c = center(i), n = kind === 'coins' ? 7 : 9;
+    const glyph = { coins: '<b>₱</b>', sparkle: '✦', stars: '★', hearts: '♥' }[kind] || '✦';
+    const parts = Array.from({ length: n }, (_, k) => {
+      const a = (k / n) * Math.PI * 2 + Math.random() * 0.5, r = 34 + Math.random() * 30;
+      return `<i style="--x:${(Math.cos(a) * r).toFixed(0)}px;--y:${(-40 - Math.random() * 60).toFixed(0)}px;--d:${(Math.random() * 0.15).toFixed(2)}s;--c:${color}">${glyph}</i>`;
+    }).join('');
+    this.fx(c, `burst ${kind}`, parts, 1500);
   }
 
   async glide(p, toPos, jailed) {
