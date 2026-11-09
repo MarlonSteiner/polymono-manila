@@ -4,6 +4,8 @@ import { UI, sheet } from './ui.js';
 import { BoardView } from './board.js';
 import { tokenSVG, logoSVG, icon } from './art.js';
 import { sfx, unlock } from './audio.js';
+import { initOnline, openOnline, rejoin, savedRoom, leaveGame, endGame } from './online.js';
+import { cleanCode } from './net.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -38,16 +40,22 @@ function startHome() {
   homeBoard.applyCamera(true);
   clearInterval(spinTimer);
   spinTimer = setInterval(() => { homeBoard.spinSide = (homeBoard.spinSide + 1) % 4; homeBoard.applyCamera(false, 3800); }, 5200);
-  const save = loadSave();
+  const save = loadSave(), room = savedRoom();
   $('#home-ui').innerHTML = `
     <div class="home-logo">${logoSVG()}</div>
     <p class="tagline">Buy the bay. Build the skyline.<br>The property game of Metro Manila.</p>
     <div class="home-btns">
       ${save ? `<button class="btn primary big" id="h-cont">${icon('speed')}<span>Continue</span><small>Round ${save.round} · ${save.players.filter((p) => !p.bankrupt).length} players left</small></button>` : ''}
-      <button class="btn ${save ? '' : 'primary'} big" id="h-new">${icon('plus')}<span>New game</span></button>
+      ${room ? `<button class="btn gold big" id="h-rejoin">${icon('user')}<span>Rejoin room ${esc(room)}</span></button>` : ''}
+      <div class="home-pair">
+        <button class="btn ${save || room ? '' : 'primary'} big" id="h-new">${icon('plus')}<span>New game</span><small>on this device</small></button>
+        <button class="btn big" id="h-online">${icon('user')}<span>Online</span><small>with friends</small></button>
+      </div>
       <button class="btn ghost" id="h-rules">${icon('book')}<span>How to play</span></button>
     </div>
-    <p class="fine">2 to 6 players on one device · CPU friends included</p>`;
+    <p class="fine">Pass one phone around, or play together on your own phones</p>`;
+  $('#h-online').onclick = () => { sfx.tap(); stopHome(); openOnline(); };
+  if (room) $('#h-rejoin').onclick = () => { sfx.tap(); stopHome(); rejoin(); };
   $('#h-new').onclick = () => { sfx.tap(); startSetup(); };
   $('#h-rules').onclick = () => { sfx.tap(); rules(); };
   if (save) $('#h-cont').onclick = () => { sfx.tap(); startGame(save); };
@@ -154,20 +162,32 @@ function renderSetup() {
 // ---------- game ----------
 function stopHome() { clearInterval(spinTimer); homeBoard?.destroy(); homeBoard = null; }
 
-async function startGame(state) {
+async function startGame(state, sync = null, { ff = false } = {}) {
   stopHome();
   show('game');
+  if (game) game.stopped = true;
+  document.querySelectorAll('#layer .sheet-wrap, #layer .card-pop').forEach((el) => el.remove());
   ui?.destroy();
   ui = new UI($('#game'));
   game = new Game(state, ui);
+  if (sync) { game.sync = sync; sync.g = game; }
   ui.attach(game, {
     rules,
-    quit: () => { game.stopped = true; location.reload(); },
-    over: (v) => { ui.destroy(); ui = null; game = null; v === 'again' ? startSetup() : startHome(); },
+    quit: () => { game.stopped = true; if (sync) leaveGame(); location.reload(); },
+    over: (v) => { if (sync) endGame(); ui.destroy(); ui = null; game = null; v === 'again' ? startSetup() : startHome(); },
   });
-  await new Promise((r) => setTimeout(r, 450));
-  game.run();
+  const me = game;
+  if (ff) ui.ff = true;
+  else await new Promise((r) => setTimeout(r, 450));
+  if (game === me) game.run();
 }
+
+initOnline({
+  show: (id) => { stopHome(); show(id); },
+  home: startHome,
+  startGame,
+  status: (up) => ui?.setOnline(up),
+});
 
 function rules() {
   const R = (t, b) => `<section class="rule"><h4>${t}</h4><p>${b}</p></section>`;
@@ -198,7 +218,12 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
 const fontsReady = document.fonts ? document.fonts.ready : Promise.resolve();
 Promise.race([fontsReady, new Promise((r) => setTimeout(r, 1200))]).then(() => {
   document.body.classList.add('ready');
-  startHome();
+  // Invite links look like ?room=ABCDE
+  const invite = cleanCode(new URLSearchParams(location.search).get('room') || '');
+  if (invite) {
+    history.replaceState(null, '', location.pathname);
+    openOnline(invite);
+  } else startHome();
 });
 
 export { BOARD, isOwnable };

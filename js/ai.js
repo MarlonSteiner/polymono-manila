@@ -27,7 +27,7 @@ export function shouldBuy(g, p, i) {
 
 export function auctionMax(g, p, i) {
   const t = BOARD[i];
-  let f = 0.75 + Math.random() * 0.25;
+  let f = 0.75 + g.rand() * 0.25;
   if (completes(g, p.id, i)) f = 1.7;
   else if (blocks(g, p.id, i)) f = 1.3;
   else if (t.type === 'station') f = 1.05;
@@ -118,7 +118,7 @@ export function evaluateTrade(g, t) {
 // A bot looks for the one lot it is missing from a set: first it tries a swap that
 // completes a set for both sides, otherwise it offers cash.
 export async function maybeTrade(g, p) {
-  if (Math.random() > 0.6) return;
+  if (g.rand() > 0.6) return;
   g.s.memo ||= {};
   const missingFor = (pid) => Object.keys(GROUPS).map((k) => {
     const tiles = GROUP_TILES[k];
@@ -138,14 +138,13 @@ export async function maybeTrade(g, p) {
       const diff = Math.round((BOARD[want.i].price - BOARD[swap.i].price) / 100) * 100;
       t = { from: p.id, to: q.id, give: { props: [swap.i], cash: Math.max(0, diff), passes: 0 }, get: { props: [want.i], cash: Math.max(0, -diff), passes: 0 } };
     } else {
-      const price = Math.round((BOARD[want.i].price * (2 + Math.random() * 0.8)) / 100) * 100;
+      const price = Math.round((BOARD[want.i].price * (2 + g.rand() * 0.8)) / 100) * 100;
       if (p.cash - price < 600) continue;
       t = { from: p.id, to: q.id, give: { props: [], cash: price, passes: 0 }, get: { props: [want.i], cash: 0, passes: 0 } };
     }
     if (!g.validTrade(t)) continue;
-    const yes = q.human ? await g.ui.tradeOffer(t) : evaluateTrade(g, t);
-    if (yes && g.validTrade(t)) g.applyTrade(t);
-    else if (q.human) g.ui.toast(`${q.name} said no to ${p.name}.`, 'calm');
+    if (q.human) await g.proposeTrade(t);
+    else if (evaluateTrade(g, t)) g.applyTrade(t);
     return;
   }
 }

@@ -4,20 +4,30 @@ import { BOARD, GROUPS, GROUP_TILES, STATIONS, UTILITIES, SALARY, JAIL_POS, JAIL
   SWERTE, BAYANIHAN, isOwnable, peso } from './data.js';
 import * as AI from './ai.js';
 
-const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+// Every random thing that changes the game comes from this seeded generator, kept in the state.
+// That way phones in an online room that start from the same state play out the exact same game.
+export function nextRandom(s) {
+  let t = (s.rng = (s.rng + 0x6d2b79f5) >>> 0);
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+const newSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+const shuffle = (a, rand) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const SAVE_KEY = 'polymono-manila-save-v1';
 
 export function newState(setup) {
+  const seed = { rng: newSeed() }, rand = () => nextRandom(seed);
   return {
     v: 1,
     settings: setup.settings,
     players: setup.players.map((p, i) => ({
-      id: i, name: p.name, token: p.token, color: p.color, human: p.human,
+      id: i, name: p.name, token: p.token, color: p.color, human: p.human, ...(p.dev ? { dev: p.dev } : {}),
       cash: setup.settings.startCash, pos: 0, jail: 0, passes: [], bankrupt: false,
     })),
     own: BOARD.map((t, i) => (isOwnable(i) ? { owner: null, houses: 0, mortgaged: false } : null)),
-    decks: { swerte: shuffle([...SWERTE.keys()]), bayanihan: shuffle([...BAYANIHAN.keys()]) },
-    pot: 0, turn: 0, round: 1, log: [], winner: null, dice: [3, 4],
+    decks: { swerte: shuffle([...SWERTE.keys()], rand), bayanihan: shuffle([...BAYANIHAN.keys()], rand) },
+    pot: 0, turn: 0, round: 1, tn: 0, log: [], winner: null, dice: [3, 4], rng: seed.rng,
   };
 }
 
@@ -25,13 +35,33 @@ export const loadSave = () => { try { return JSON.parse(localStorage.getItem(SAV
 export const clearSave = () => { try { localStorage.removeItem(SAVE_KEY); } catch {} };
 
 export class Game {
-  constructor(state, ui) { this.s = state; this.ui = ui; this.stopped = false; }
+  constructor(state, ui) {
+    this.s = state; this.ui = ui; this.stopped = false;
+    this.sync = null; // set for online games (see online.js)
+    if (this.s.rng == null) this.s.rng = newSeed();
+  }
 
   get players() { return this.s.players; }
   get alive() { return this.s.players.filter((p) => !p.bankrupt); }
   get cur() { return this.s.players[this.s.turn]; }
   own(i) { return this.s.own[i]; }
-  save() { try { if (!this.s.winner) localStorage.setItem(SAVE_KEY, JSON.stringify(this.s)); } catch {} }
+  save() { if (this.sync) return; try { if (!this.s.winner) localStorage.setItem(SAVE_KEY, JSON.stringify(this.s)); } catch {} }
+  rand() { return nextRandom(this.s); }
+
+  // ---------- human choices ----------
+  // A choice only player p can make. Online, only p's phone asks; the other phones wait for the answer.
+  decide(p, ask, label = '') { return this.sync ? this.sync.decide(p, ask, label) : ask(); }
+  // Is p a human playing on this device?
+  isLocal(p) { return p.human && (!this.sync || this.sync.mine(p)); }
+  // Something a human does in the middle of their turn (build, mortgage, trade). Online it's sent to the other phones.
+  async act(o) {
+    this.sync?.record(o);
+    return this.applyAct(o);
+  }
+  async applyAct(o) {
+    if (o.k === 'trade') return this.proposeTrade(o.t);
+    if (['build', 'sell', 'mortgage', 'unmortgage'].includes(o.k)) return this[o.k](o.pid, o.i);
+  }
   log(msg, pid = null) { this.s.log.unshift({ msg, pid, r: this.s.round }); this.s.log.length = Math.min(this.s.log.length, 80); this.ui.onLog?.(); }
 
   // ---------- queries ----------
@@ -149,6 +179,15 @@ export class Game {
     if (!t.give.props.every((i) => ta.includes(i)) || !t.get.props.every((i) => tb.includes(i))) return false;
     return t.give.props.length + t.get.props.length + t.give.cash + t.get.cash + t.give.passes + t.get.passes > 0;
   }
+  async proposeTrade(t) {
+    const q = this.s.players[t.to];
+    let yes;
+    if (q.human) yes = await this.decide(q, () => this.ui.tradeOffer(t), 'is looking at a deal');
+    else { await this.ui.thinkTrade(q); yes = AI.evaluateTrade(this, t); }
+    if (yes && this.validTrade(t)) { this.applyTrade(t); return true; }
+    this.ui.tradeDeclined(t);
+    return false;
+  }
   applyTrade(t) {
     const A = this.s.players[t.from], B = this.s.players[t.to];
     A.cash += t.get.cash - t.give.cash; B.cash += t.give.cash - t.get.cash;
@@ -183,7 +222,7 @@ export class Game {
       return false;
     }
     if (!p.human) { AI.raise(this, p, amount); return p.cash >= amount; }
-    return this.ui.raiseFunds(p, amount, toId);
+    return this.decide(p, () => this.ui.raiseFunds(p, amount, toId), 'is raising cash');
   }
   async bankrupt(p, toId) {
     const to = toId !== null ? this.s.players[toId] : null;
@@ -210,7 +249,7 @@ export class Game {
   }
 
   // ---------- moving ----------
-  rollDice() { return [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]; }
+  rollDice() { return [1 + Math.floor(this.rand() * 6), 1 + Math.floor(this.rand() * 6)]; }
   async moveSteps(p, steps) {
     const from = p.pos;
     const to = (from + steps + 40) % 40;
@@ -267,7 +306,7 @@ export class Game {
 
   async offer(p, i) {
     const t = BOARD[i];
-    const buy = p.human ? (p.cash >= t.price ? await this.ui.offerBuy(p, i) : (await this.ui.cantAfford(p, i), false))
+    const buy = p.human ? (p.cash >= t.price ? await this.decide(p, () => this.ui.offerBuy(p, i), `is looking at ${t.name}`) : (await this.ui.cantAfford(p, i), false))
       : AI.shouldBuy(this, p, i);
     if (buy && p.cash >= t.price) {
       p.cash -= t.price; this.s.own[i].owner = p.id;
@@ -279,16 +318,45 @@ export class Game {
     if (this.s.settings.auctions && this.alive.length > 1) await this.auction(i);
   }
 
+  // Everyone still in the game bids in turn, starting with whoever landed there.
   async auction(i) {
-    this.log(`${BOARD[i].name} goes up for auction.`);
-    const res = await this.ui.auction(i);
-    if (res && res.winner !== null) {
-      const w = this.s.players[res.winner];
-      w.cash -= res.price; this.s.own[i].owner = w.id;
-      this.log(`${w.name} won ${BOARD[i].name} at auction for ${peso(res.price)}.`, w.id);
-      this.ui.onMoney?.(w.id, -res.price, 'buy');
+    const t = BOARD[i], n = this.s.players.length;
+    this.log(`${t.name} goes up for auction.`);
+    const order = [];
+    for (let k = 0; k < n; k++) { const q = this.s.players[(this.s.turn + k) % n]; if (!q.bankrupt) order.push(q.id); }
+    const a = { i, order, out: [], high: 0, by: null, now: null };
+    await this.ui.auctionOpen(a);
+    let idx = 0, guard = 600;
+    while (guard-- && !this.stopped) {
+      const live = order.filter((id) => !a.out.includes(id));
+      if (!live.length || (a.by !== null && live.length === 1 && live[0] === a.by)) break;
+      const q = this.s.players[order[idx++ % order.length]];
+      if (a.out.includes(q.id) || q.id === a.by) continue;
+      const min = a.high + (a.high < 1000 ? 50 : 100);
+      if (q.cash < min) { a.out.push(q.id); continue; }
+      a.now = q.id;
+      await this.ui.auctionTurn(a, q);
+      if (!q.human) {
+        const max = AI.auctionMax(this, q, i);
+        const jump = Math.max(min - a.high, Math.round((t.price * (0.06 + this.rand() * 0.08)) / 50) * 50);
+        if (max >= min) { a.high = Math.max(min, Math.min(max, a.high + jump)); a.by = q.id; } else a.out.push(q.id);
+      } else {
+        const r50 = (v) => Math.max(50, Math.round(v / 50) * 50);
+        const steps = [...new Set([min, a.high + r50(t.price * 0.1), a.high + r50(t.price * 0.25)])];
+        const choice = await this.decide(q, () => this.ui.auctionBid(a, q, steps), 'is bidding');
+        if (choice === 'pass') a.out.push(q.id); else { a.high = +choice; a.by = q.id; }
+      }
+      this.ui.auctionBidMade(a, q);
+    }
+    a.now = null;
+    await this.ui.auctionClose(a);
+    if (a.by !== null) {
+      const w = this.s.players[a.by];
+      w.cash -= a.high; this.s.own[i].owner = w.id;
+      this.log(`${w.name} won ${t.name} at auction for ${peso(a.high)}.`, w.id);
+      this.ui.onMoney?.(w.id, -a.high, 'buy');
       this.ui.render();
-    } else this.log(`Nobody bid on ${BOARD[i].name}.`);
+    } else this.log(`Nobody bid on ${t.name}.`);
   }
 
   drawCard(deck) {
@@ -353,6 +421,8 @@ export class Game {
     this.ui.render();
     while (!this.stopped && this.s.winner === null) {
       this.save();
+      this.sync?.turnStart();
+      this.s.tn = (this.s.tn || 0) + 1;
       await this.turn(this.cur);
       if (this.stopped) return;
       if (this.s.winner !== null) break;
@@ -368,7 +438,8 @@ export class Game {
       }
     }
     if (this.stopped) return;
-    clearSave();
+    if (!this.sync) clearSave();
+    this.sync?.gameOver();
     await this.ui.gameOver(this.s.players[this.s.winner]);
   }
 
@@ -386,7 +457,7 @@ export class Game {
       if (this.stopped || p.bankrupt) return;
       let dice;
       if (p.jail) {
-        const choice = p.human ? await this.ui.preRoll(p, { jail: true }) : AI.jailChoice(this, p);
+        const choice = p.human ? await this.decide(p, () => this.ui.preRoll(p, { jail: true }), 'is stuck in traffic') : AI.jailChoice(this, p);
         if (this.stopped) return;
         if (choice === 'card' && p.passes.length > 0) {
           this.usePass(p); p.jail = 0; this.log(`${p.name} used an Angkas Pass to skip traffic.`, p.id);
@@ -420,7 +491,8 @@ export class Game {
         break;
       }
 
-      const go = p.human ? await this.ui.preRoll(p, { again: doubles > 0 }) : (AI.manage(this, p), await AI.maybeTrade(this, p), 'roll');
+      const go = p.human ? await this.decide(p, () => this.ui.preRoll(p, { again: doubles > 0 }), 'is about to roll')
+        : (AI.manage(this, p), await AI.maybeTrade(this, p), 'roll');
       if (this.stopped || go !== 'roll') return;
       dice = this.rollDice(); this.s.dice = dice;
       await this.ui.roll(p, dice);
@@ -436,7 +508,7 @@ export class Game {
       this.ui.toast('Doubles! Roll again 🎲', 'good');
     }
     if (this.stopped || p.bankrupt || this.s.winner !== null) return;
-    if (p.human) await this.ui.postRoll(p);
+    if (p.human) await this.decide(p, () => this.ui.postRoll(p), 'is finishing their turn');
     else { AI.manage(this, p); await this.ui.pause(350); }
     this.ui.render();
   }

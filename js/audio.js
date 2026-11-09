@@ -1,8 +1,10 @@
 // Tiny synthesized sound effects (no files to download).
-let ctx = null, muted = false;
+let ctx = null, muted = false, hushed = false;
 try { muted = localStorage.getItem('pm-muted') === '1'; } catch {}
 
 export const isMuted = () => muted;
+// Silence everything for a moment, e.g. while a phone catches up on an online game.
+export const hush = (v) => { hushed = v; };
 export function setMuted(m) { muted = m; try { localStorage.setItem('pm-muted', m ? '1' : '0'); } catch {} }
 export function unlock() {
   if (!ctx) { const A = window.AudioContext || window.webkitAudioContext; if (A) ctx = new A(); }
@@ -10,7 +12,7 @@ export function unlock() {
 }
 
 function tone(freq, dur = 0.12, type = 'sine', vol = 0.18, delay = 0, slide = 0) {
-  if (muted || !ctx) return;
+  if (muted || hushed || !ctx) return;
   const t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
   o.type = type; o.frequency.setValueAtTime(freq, t);
   if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
@@ -19,7 +21,7 @@ function tone(freq, dur = 0.12, type = 'sine', vol = 0.18, delay = 0, slide = 0)
   o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + 0.02);
 }
 function noise(dur = 0.05, vol = 0.12, delay = 0, hp = 1800) {
-  if (muted || !ctx) return;
+  if (muted || hushed || !ctx) return;
   const t = ctx.currentTime + delay, len = Math.floor(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
   const s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();

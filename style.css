@@ -137,7 +137,7 @@ input { font: inherit; -webkit-user-select: text; user-select: text; }
 .tagline { margin: auto 0 18px; text-align: center; font: 600 18px/1.35 var(--display); color: var(--ink); text-shadow: 0 1px 0 #fff8; }
 .home-btns { display: flex; flex-direction: column; gap: 14px; width: min(360px, 88vw); animation: rise .7s .2s var(--ease-pop) both; }
 @keyframes rise { from { transform: translateY(40px); opacity: 0; } }
-.fine { font-size: 13px; color: var(--ink2); margin: 16px 0 0; }
+.fine { font-size: 13px; color: var(--ink2); margin: 16px 0 0; text-align: center; }
 
 /* ---------- setup ---------- */
 #setup { background: var(--paper); background-image: radial-gradient(#ead9b9 1.2px, transparent 1.3px); background-size: 22px 22px; }
@@ -483,3 +483,35 @@ input { font: inherit; -webkit-user-select: text; user-select: text; }
 @media (prefers-reduced-motion: reduce) {
   .cloud, .rays, .big-token.win, .dots i { animation: none; }
 }
+
+/* ---------- online ---------- */
+.home-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.home-pair .btn { padding-left: 8px; padding-right: 8px; }
+.on-intro { margin: 4px 6px 0; font-size: 15px; color: var(--ink2); line-height: 1.4; }
+.prow.solo { grid-template-columns: 64px 1fr; }
+.on-create { width: 100%; margin-top: 14px; }
+.on-join { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.on-join .btn { min-width: 96px; }
+.code-in { min-width: 0; border: 2.5px solid var(--ink); border-radius: 16px; background: #fff; padding: 12px 14px; text-align: center; outline: none;
+  font: 700 28px var(--display); letter-spacing: .28em; text-transform: uppercase; color: var(--ink); }
+.code-in::placeholder { color: #d9c7a8; letter-spacing: .2em; }
+.on-msg { min-height: 22px; margin: 14px 6px 0; text-align: center; font-size: 15px; color: var(--ink2); }
+.on-msg.wait { margin-top: 16px; }
+.room-card { margin-top: 6px; padding: 16px; text-align: center; background: var(--card); border: 2.5px solid var(--ink); border-radius: 24px; box-shadow: 0 5px 0 var(--ink); }
+.room-card > small { font-size: 13px; color: var(--ink2); }
+.room-code { display: flex; justify-content: center; gap: 8px; margin: 8px 0 14px; }
+.room-code span { width: 48px; height: 58px; display: grid; place-items: center; border-radius: 14px; background: var(--yellow); border: 2.5px solid var(--ink); box-shadow: 0 4px 0 var(--ink); font: 700 32px var(--display); }
+.room-code span:nth-child(2n) { background: #ffd2c2; }
+.room-card .btn { width: 100%; }
+.prow.lob { grid-template-columns: 64px 1fr 32px; }
+.prow.lob.me { background: color-mix(in srgb, var(--pc) 12%, var(--card)); }
+.lname b { display: block; font: 600 18px var(--display); }
+.lname b em { font: 700 13px 'Nunito'; font-style: normal; color: var(--ink2); }
+.lname small { display: inline-block; margin-top: 3px; padding: 2px 8px; border-radius: 99px; background: var(--paper2); font-size: 11px; color: var(--ink2); }
+.on-rules { margin: 0 6px; padding: 12px 14px; background: var(--card); border: 2px solid var(--line); border-radius: 16px; font-size: 15px; }
+.lobby-wait { padding: 18px 10px; text-align: center; font: 600 17px var(--display); color: var(--ink2); }
+.net-pill { position: absolute; right: 12px; top: 72px; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 99px; background: var(--card); border: 2px solid var(--ink); font: 700 12px var(--display); letter-spacing: .08em; }
+.net-pill i { width: 9px; height: 9px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 2px #5fb46a44; }
+.net-pill.down i { background: var(--red); animation: dot 1s infinite; }
+.wait-deal { text-align: center; padding: 4px 0 12px; color: var(--ink2); }
+@media (max-width: 380px) { .room-code span { width: 42px; height: 52px; font-size: 28px; } }

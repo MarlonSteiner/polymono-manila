@@ -2,13 +2,14 @@
 import { BOARD, GROUPS, GROUP_TILES, STATIONS, UTILITIES, STATION_RENT, JAIL_FINE, peso } from './data.js';
 import { tokenSVG, tileIcon, deckArt, icon, C } from './art.js';
 import { BoardView } from './board.js';
-import { sfx, isMuted, setMuted } from './audio.js';
-import * as AI from './ai.js';
+import { sfx, isMuted, setMuted, hush } from './audio.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const first = (n) => esc(n.split(' ')[0]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const dots = '<span class="dots"><i></i><i></i><i></i></span>';
+let quiet = false; // no toasts while a phone fast-forwards through an online game
 
 export const layer = () => $('#layer');
 
@@ -43,6 +44,7 @@ export function btnHTML(a) {
 }
 
 export function toast(msg, type = 'calm') {
+  if (quiet) return;
   const host = $('#toasts');
   const t = document.createElement('div');
   t.className = `toast ${type}`; t.innerHTML = msg;
@@ -101,7 +103,15 @@ const diceFace = (n) => {
 const DIE_ROT = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 5: [-90, 0], 2: [90, 0] };
 
 export class UI {
-  constructor(root) { this.root = root; this.speed = 1.4; try { this.speed = +localStorage.getItem('pm-speed') || 1.4; } catch {} }
+  constructor(root) { this.root = root; this.speed = 1.4; this._ff = false; try { this.speed = +localStorage.getItem('pm-speed') || 1.4; } catch {} }
+
+  // Fast-forward: replay moves with no animation or sound, used when a phone rejoins an online game.
+  get ff() { return this._ff; }
+  set ff(v) {
+    this._ff = quiet = v; hush(v);
+    if (!v && this.board) { this.render(); this.board.applyCamera(true); }
+  }
+  get online() { return !!this.g.sync; }
 
   attach(game, hooks) {
     this.g = game; this.hooks = hooks;
@@ -111,6 +121,7 @@ export class UI {
       <main id="stage-wrap"><div id="stage"></div>
         <div class="turn-banner"></div>
         <button class="fab" id="btn-cam" aria-label="Toggle map">${icon('map')}</button>
+        ${game.sync ? `<div class="net-pill" title="Online room"><i></i><span>${esc(game.sync.code)}</span></div>` : ''}
         <div class="pot-pill" hidden></div>
         <div id="dice"><div class="die d1"><div class="cube">${[1, 2, 3, 4, 5, 6].map(diceFace).join('')}</div></div><div class="die d2"><div class="cube">${[1, 2, 3, 4, 5, 6].map(diceFace).join('')}</div></div><div class="dsum"></div></div>
       </main>
@@ -134,16 +145,25 @@ export class UI {
 
   // ---------- engine hooks ----------
   render() { this.board.render(); this.renderHud(); }
-  pause(ms) { return sleep(ms / this.speed); }
+  pause(ms) { return this.ff ? Promise.resolve() : sleep(ms / this.speed); }
+  setOnline(up) { $('.net-pill', this.root)?.classList.toggle('down', !up); }
+
+  // Online: someone else has to make a choice. Shown in the dock unless this phone is in the middle of its own turn.
+  waiting(p, on, label = '') {
+    if (!on || this.ff || this.dockActive) return;
+    this.dock({ status: `${dots} <b>${esc(p.name)}</b> ${esc(label || 'is deciding')}` });
+  }
   onLog() { this.renderLog(); }
 
   beginTurn(p) {
     this.board.focusPid = p.id; this.board.focusPos = null;
     this.render(); this.board.applyCamera();
     const b = $('.turn-banner', this.root);
-    b.innerHTML = `<span class="mini" style="--pc:${p.color}">${tokenSVG(p.token, { shadow: false })}</span><span><b>${esc(p.name)}</b>${p.human ? '’s turn' : ' is playing'}</span>`;
-    b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
-    if (!p.human) this.dock({ status: `<span class="dots"><i></i><i></i><i></i></span> ${esc(p.name)} is thinking` });
+    const mine = this.g.isLocal(p);
+    b.innerHTML = `<span class="mini" style="--pc:${p.color}">${tokenSVG(p.token, { shadow: false })}</span><span>${mine && this.online ? '<b>Your turn</b>' : `<b>${esc(p.name)}</b>${p.human ? '’s turn' : ' is playing'}`}</span>`;
+    if (!this.ff) { b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
+    if (mine && this.online && !this.ff) sfx.good();
+    if (!mine) this.dock({ status: `${dots} ${esc(p.name)} ${p.human ? 'is playing' : 'is thinking'}` });
   }
 
   async preRoll(p, { jail = false, again = false } = {}) {
@@ -168,14 +188,19 @@ export class UI {
       <div class="dock-main">${main.map(btnHTML).join('')}</div>
       ${tools ? `<button class="tool" data-t="trade">${icon('trade')}<span>Trade</span></button>` : ''}</div>`;
     d.classList.toggle('waiting', !main.length);
+    this.dockActive = !!main.length;
+    this.dockFor = tools && p ? p.id : null;
+    d.onclick = null;
     if (!main.length) return Promise.resolve();
     return new Promise((res) => {
       d.onclick = (e) => {
+        if (this.busy) return;
         const t = e.target.closest('[data-t]');
         if (t && p) { sfx.tap(); return t.dataset.t === 'assets' ? this.openAssets(p) : this.openTrade(p); }
         const b = e.target.closest('[data-v]');
         if (!b || b.disabled) return;
         d.onclick = null; sfx.tap();
+        this.dockActive = false; this.dockFor = null;
         d.innerHTML = ''; d.classList.add('waiting');
         res(b.dataset.v);
       };
@@ -183,6 +208,7 @@ export class UI {
   }
 
   async roll(p, dice, label = '') {
+    if (this.ff) return;
     const box = $('#dice', this.root);
     box.classList.remove('settled'); box.classList.add('rolling');
     $('.dsum', box).textContent = label;
@@ -192,7 +218,7 @@ export class UI {
       r[0] = Math.ceil(r[0] / 360) * 360 + 720 + ax; r[1] = Math.ceil(r[1] / 360) * 360 + 360 * (k + 1) + ay; r[2] = (Math.random() - 0.5) * 24;
       el.querySelector('.cube').style.transform = `rotateZ(${r[2]}deg) rotateX(${r[0]}deg) rotateY(${r[1]}deg)`;
     });
-    await sleep(p.human ? 1000 : 800);
+    await sleep(this.g.isLocal(p) ? 1000 : 800);
     box.classList.remove('rolling'); box.classList.add('settled');
     $('.dsum', box).innerHTML = `${dice[0] + dice[1]}${dice[0] === dice[1] ? ' <em>doubles!</em>' : ''}`;
     sfx.land();
@@ -200,11 +226,13 @@ export class UI {
   }
 
   async animateMove(p, from, steps) {
+    if (this.ff) return;
     await this.board.hop(p, from, steps, (k) => sfx.hop(k));
     sfx.land();
   }
 
   async toJail(p) {
+    if (this.ff) return;
     sfx.horn();
     toast(`🚨 ${esc(p.name)} is stuck in EDSA Traffic!`, 'warn');
     await this.board.glide(p, 10, true);
@@ -214,7 +242,7 @@ export class UI {
 
   onMoney(pid, delta, why) {
     const chip = $(`.chip[data-pid="${pid}"]`, this.root);
-    if (chip) {
+    if (chip && !this.ff) {
       const f = document.createElement('span');
       f.className = `float ${delta >= 0 ? 'up' : 'down'}`;
       f.textContent = (delta >= 0 ? '+' : '−') + peso(Math.abs(delta)).slice(0);
@@ -226,7 +254,7 @@ export class UI {
     this.updatePot();
   }
 
-  onBuild(i, pid) { sfx.build(); this.board.pulseTile(i); this.render(); }
+  onBuild(i, pid) { sfx.build(); if (!this.ff) this.board.pulseTile(i); this.render(); }
   onTrade(t) { sfx.good(); this.render(); toast(`🤝 Deal between ${first(this.g.s.players[t.from].name)} and ${first(this.g.s.players[t.to].name)}!`, 'good'); }
 
   async rentNotice(p, owner, i, rent) {
@@ -271,16 +299,18 @@ export class UI {
   }
 
   async showCard(p, deck, card) {
+    if (this.ff) return;
+    const tap = this.g.isLocal(p);
     sfx.card();
     const w = document.createElement('div');
     w.className = 'card-pop';
     w.innerHTML = `<div class="card ${deck}"><div class="card-head">${deckArt(deck)}<b>${deck === 'swerte' ? 'Swerte' : 'Bayanihan'}</b></div>
-      <p>${esc(card.text)}</p>${p.human ? '<button class="btn primary" data-ok>Okay!</button>' : `<small>${esc(p.name)}</small>`}</div>`;
+      <p>${esc(card.text)}</p>${tap ? '<button class="btn primary" data-ok>Okay!</button>' : `<small>${esc(p.name)}</small>`}</div>`;
     layer().appendChild(w);
     requestAnimationFrame(() => w.classList.add('in'));
     await new Promise((res) => {
-      let t = p.human ? null : setTimeout(res, 2300 / this.speed);
-      w.onclick = (e) => { if (!p.human || e.target.closest('[data-ok]')) { clearTimeout(t); sfx.tap(); res(); } };
+      let t = tap ? null : setTimeout(res, 2300 / this.speed);
+      w.onclick = (e) => { if (!tap || e.target.closest('[data-ok]')) { clearTimeout(t); sfx.tap(); res(); } };
     });
     w.classList.add('out');
     setTimeout(() => w.remove(), 350);
@@ -288,12 +318,14 @@ export class UI {
   }
 
   async onBankrupt(p, to) {
+    if (this.ff) return;
     sfx.bad();
     this.render();
     await sheet({ title: `${esc(p.name)} is bankrupt`, sub: to ? `Everything goes to ${esc(to.name)}.` : 'Their lots go back to the bank.', body: `<div class="big-token sad">${tokenSVG(p.token)}</div>`, actions: [{ v: 'ok', label: 'Okay', kind: 'primary' }], dismiss: false });
   }
 
   async cannotPay(p, amount) {
+    if (this.ff || !this.g.isLocal(p)) return;
     await sheet({ title: 'Out of pesos', sub: `You owe ${peso(amount)} and can’t raise enough, even selling and mortgaging everything.`, body: `<div class="big-token sad">${tokenSVG(p.token)}</div>`, actions: [{ v: 'ok', label: 'Declare bankruptcy', kind: 'danger' }], dismiss: false });
   }
 
@@ -304,66 +336,87 @@ export class UI {
 
   async tradeOffer(t) {
     const A = this.g.s.players[t.from], B = this.g.s.players[t.to];
+    const handOver = A.human && !this.online; // two humans sharing this phone
+    sfx.card();
     const v = await sheet({
-      title: `${esc(A.name)} wants to trade`, sub: `Offer for ${esc(B.name)}`,
+      title: handOver ? `Pass the phone to ${esc(B.name)}` : `${esc(A.name)} wants to trade`, sub: handOver ? `${esc(A.name)} proposes a deal` : `Offer for ${esc(B.name)}`,
       body: this.tradeSummary(t), dismiss: false,
       actions: [{ v: 'no', label: 'No thanks' }, { v: 'yes', label: 'Accept', kind: 'primary' }],
     });
     return v === 'yes';
   }
 
+  async thinkTrade(q) {
+    toast(`${dots} ${esc(q.name)} is thinking about it…`, 'calm');
+    await this.pause(1100);
+  }
+
+  tradeDeclined(t) {
+    if (this.ff) return;
+    const A = this.g.s.players[t.from], B = this.g.s.players[t.to];
+    sfx.bad();
+    toast(`${first(B.name)} said no to ${first(A.name)}’s deal.`, 'warn');
+  }
+
   // ---------- auction ----------
-  async auction(i) {
-    const g = this.g, t = BOARD[i];
-    const order = []; const n = g.s.players.length;
-    for (let k = 0; k < n; k++) { const q = g.s.players[(g.s.turn + k) % n]; if (!q.bankrupt) order.push(q); }
-    const out = new Set(); let high = 0, by = null;
+  // The engine runs the bidding; these only draw it.
+  async auctionOpen(a) {
+    if (this.ff) return;
+    const t = BOARD[a.i];
     sfx.gavel();
-    let host, closeFn;
-    const done = sheet({
+    this.auc = {};
+    this.auc.done = sheet({
       title: `Auction · ${esc(t.name)}`, sub: `List price ${peso(t.price)}`, dismiss: false, cls: 'auction',
       body: `<div class="auc"><div class="auc-art">${tileIcon(t.look, t.group)}</div><div class="auc-bid"><small>Highest bid</small><b class="hb">—</b><span class="hby"></span></div></div><div class="auc-players"></div><div class="auc-ctrl"></div>`,
-      mount: (el, close) => { host = el; closeFn = close; },
+      mount: (el, close) => { this.auc.host = el; this.auc.close = close; },
     });
-    const paint = (turnId, msg = '') => {
-      $('.hb', host).textContent = high ? peso(high) : '—';
-      $('.hby', host).textContent = by ? `by ${g.s.players[by].name}` : 'No bids yet';
-      $('.auc-players', host).innerHTML = order.map((q) => `<span class="ap ${out.has(q.id) ? 'out' : ''} ${q.id === turnId ? 'now' : ''} ${q.id === by ? 'lead' : ''}" style="--pc:${q.color}"><span class="mini">${tokenSVG(q.token, { shadow: false })}</span>${first(q.name)}</span>`).join('');
-      if (msg) $('.auc-ctrl', host).innerHTML = `<div class="auc-msg">${msg}</div>`;
-    };
+    this.aucPaint(a);
     await sleep(60);
-    let idx = 0, guard = 600;
-    while (guard--) {
-      const live = order.filter((q) => !out.has(q.id));
-      if (!live.length || (by !== null && live.length === 1 && live[0].id === by)) break;
-      const q = order[idx++ % order.length];
-      if (out.has(q.id) || q.id === by) continue;
-      const min = high + (high < 1000 ? 50 : 100);
-      if (q.cash < min) { out.add(q.id); continue; }
-      paint(q.id);
-      if (!q.human) {
-        $('.auc-ctrl', host).innerHTML = `<div class="auc-msg"><span class="dots"><i></i><i></i><i></i></span> ${esc(q.name)} is deciding</div>`;
-        await this.pause(520);
-        const max = AI.auctionMax(g, q, i);
-        const jump = Math.max(min - high, Math.round((t.price * (0.06 + Math.random() * 0.08)) / 50) * 50);
-        if (max >= min) { high = Math.max(min, Math.min(max, high + jump)); by = q.id; sfx.tap(); }
-        else out.add(q.id);
-        continue;
-      }
-      const r50 = (v) => Math.max(50, Math.round(v / 50) * 50);
-      const steps = [...new Set([min, high + r50(t.price * 0.1), high + r50(t.price * 0.25)])];
-      $('.auc-ctrl', host).innerHTML = `<div class="auc-you"><b>${esc(q.name)}</b>, your bid · cash ${peso(q.cash)}</div>
-        <div class="auc-btns">${steps.map((v) => `<button class="btn" data-b="${v}" ${v > q.cash ? 'disabled' : ''}>${peso(v)}</button>`).join('')}</div>
-        <div class="auc-btns"><button class="btn ghost" data-b="pass">${by === null ? 'Skip' : 'Fold'}</button></div>`;
-      const choice = await new Promise((res) => { host.onclick = (e) => { const b = e.target.closest('[data-b]'); if (b && !b.disabled) { sfx.tap(); res(b.dataset.b); } }; });
-      host.onclick = null;
-      if (choice === 'pass') out.add(q.id); else { high = +choice; by = q.id; }
-    }
-    if (by !== null) { sfx.gavel(); paint(null, `🔨 Sold to <b>${esc(g.s.players[by].name)}</b> for ${peso(high)}!`); }
-    else paint(null, 'No bids. It stays with the bank.');
+  }
+
+  aucPaint(a, msg = '') {
+    const host = this.auc?.host, g = this.g;
+    if (!host) return;
+    $('.hb', host).textContent = a.high ? peso(a.high) : '—';
+    $('.hby', host).textContent = a.by !== null ? `by ${g.s.players[a.by].name}` : 'No bids yet';
+    $('.auc-players', host).innerHTML = a.order.map((id) => {
+      const q = g.s.players[id];
+      return `<span class="ap ${a.out.includes(id) ? 'out' : ''} ${id === a.now ? 'now' : ''} ${id === a.by ? 'lead' : ''}" style="--pc:${q.color}"><span class="mini">${tokenSVG(q.token, { shadow: false })}</span>${first(q.name)}</span>`;
+    }).join('');
+    if (msg) $('.auc-ctrl', host).innerHTML = `<div class="auc-msg">${msg}</div>`;
+  }
+
+  async auctionTurn(a, q) {
+    if (this.ff) return;
+    this.aucPaint(a, `${dots} ${esc(q.name)} is deciding`);
+    if (!q.human) await this.pause(520);
+  }
+
+  auctionBid(a, q, steps) {
+    const host = this.auc.host;
+    $('.auc-ctrl', host).innerHTML = `<div class="auc-you"><b>${this.online ? 'Your bid' : `${esc(q.name)}, your bid`}</b> · cash ${peso(q.cash)}</div>
+      <div class="auc-btns">${steps.map((v) => `<button class="btn" data-b="${v}" ${v > q.cash ? 'disabled' : ''}>${peso(v)}</button>`).join('')}</div>
+      <div class="auc-btns"><button class="btn ghost" data-b="pass">${a.by === null ? 'Skip' : 'Fold'}</button></div>`;
+    if (this.online) sfx.good();
+    return new Promise((res) => {
+      host.onclick = (e) => { const b = e.target.closest('[data-b]'); if (b && !b.disabled) { sfx.tap(); host.onclick = null; res(b.dataset.b); } };
+    });
+  }
+
+  auctionBidMade(a, q) {
+    if (this.ff) return;
+    if (a.by === q.id) sfx.tap();
+    this.aucPaint(a);
+  }
+
+  async auctionClose(a) {
+    if (this.ff || !this.auc) return;
+    const g = this.g;
+    if (a.by !== null) { sfx.gavel(); this.aucPaint(a, `🔨 Sold to <b>${esc(g.s.players[a.by].name)}</b> for ${peso(a.high)}!`); }
+    else this.aucPaint(a, 'No bids. It stays with the bank.');
     await this.pause(1200);
-    closeFn(null); await done;
-    return by !== null ? { winner: by, price: high } : null;
+    this.auc.close(null); await this.auc.done;
+    this.auc = null;
   }
 
   // ---------- assets ----------
@@ -410,7 +463,7 @@ export class UI {
           const b = e.target.closest('[data-a]');
           if (b && !b.disabled) {
             const i = +b.dataset.i;
-            g[b.dataset.a](p.id, i);
+            await g.act({ k: b.dataset.a, pid: p.id, i });
             $('.as-list', el).innerHTML = body(); $('.as-head', el).innerHTML = head();
             const a = $('.acts', el); a.innerHTML = acts().map(btnHTML).join('');
             this.renderHud();
@@ -471,16 +524,13 @@ export class UI {
     });
     if (v !== 'go') return;
     const t = toT(), q = g.s.players[t.to];
-    let yes;
-    if (q.human) {
-      yes = await sheet({ title: `Pass the phone to ${esc(q.name)}`, sub: `${esc(p.name)} proposes a deal`, body: this.tradeSummary(t), dismiss: false, actions: [{ v: 'no', label: 'Decline' }, { v: 'yes', label: 'Accept', kind: 'primary' }] }) === 'yes';
-    } else {
-      toast(`<span class="dots"><i></i><i></i><i></i></span> ${esc(q.name)} is thinking about it…`, 'calm');
-      await this.pause(1100);
-      yes = AI.evaluateTrade(g, t);
+    // Online, the other player answers on their own phone. Hold this turn until they do.
+    let close = null;
+    if (q.human && this.online) {
+      sheet({ title: `Waiting for ${esc(q.name)}`, sub: 'They’re looking at your deal on their phone.', body: `<div class="wait-deal">${dots}</div>` + this.tradeSummary(t), dismiss: false, mount: (el, c) => { close = c; } });
     }
-    if (yes && g.validTrade(t)) g.applyTrade(t);
-    else { sfx.bad(); toast(`${esc(q.name)} said no thanks.`, 'warn'); }
+    this.busy = true;
+    try { await g.act({ k: 'trade', t }); } finally { this.busy = false; close?.(null); }
   }
 
   // ---------- info sheets ----------
@@ -492,8 +542,7 @@ export class UI {
 
   openPlayer(pid) {
     const g = this.g, p = g.s.players[pid];
-    const cur = g.cur;
-    if (p.human && p.id === cur.id && !p.bankrupt) return this.openAssets(p);
+    if (this.dockFor === p.id && !p.bankrupt) return this.openAssets(p);
     const mine = g.ownedBy(pid);
     sheet({
       title: esc(p.name), sub: p.bankrupt ? 'Bankrupt' : `${p.human ? 'Player' : 'CPU'} · net worth ${peso(g.netWorth(pid))}`,
@@ -506,13 +555,13 @@ export class UI {
   openMenu() {
     const sp = this.speed;
     sheet({
-      title: 'Paused', sub: `Round ${this.g.s.round}${this.g.s.settings.rounds ? ` of ${this.g.s.settings.rounds}` : ''} · your game saves every turn`,
+      title: this.online ? `Room ${esc(this.g.sync.code)}` : 'Paused', sub: `Round ${this.g.s.round}${this.g.s.settings.rounds ? ` of ${this.g.s.settings.rounds}` : ''} · ${this.online ? 'the game keeps going while this menu is open' : 'your game saves every turn'}`,
       body: `<div class="menu-list">
         <button class="menu-item" data-m="sound">${icon(isMuted() ? 'mute' : 'sound')}<span>Sound</span><em>${isMuted() ? 'Off' : 'On'}</em></button>
         <button class="menu-item" data-m="speed">${icon('speed')}<span>CPU speed</span><em>${sp > 2 ? 'Fast' : 'Normal'}</em></button>
         <button class="menu-item" data-m="log">${icon('log')}<span>Game log</span><em></em></button>
         <button class="menu-item" data-m="rules">${icon('book')}<span>How to play</span><em></em></button>
-        <button class="menu-item danger" data-m="quit">${icon('home')}<span>Save and quit</span><em></em></button></div>`,
+        <button class="menu-item danger" data-m="quit">${icon('home')}<span>${this.online ? 'Leave room' : 'Save and quit'}</span><em>${this.online ? 'Rejoin from home' : ''}</em></button></div>`,
       actions: [{ v: 'ok', label: 'Resume', kind: 'primary' }],
       mount: (el, close) => el.addEventListener('click', (e) => {
         const b = e.target.closest('[data-m]'); if (!b) return;
@@ -574,6 +623,7 @@ export class UI {
 
   async gameOver(w) {
     const g = this.g;
+    this.ff = false;
     sfx.win(); confetti(140);
     const rank = [...g.s.players].sort((a, b) => (b.bankrupt ? -1 : 0) - (a.bankrupt ? -1 : 0) || g.netWorth(b.id) - g.netWorth(a.id));
     const v = await sheet({
@@ -581,7 +631,7 @@ export class UI {
       body: `<div class="go-hero" style="--pc:${w.color}"><div class="rays"></div><div class="big-token win">${tokenSVG(w.token)}</div></div>
         <h2 class="go-title">${esc(w.name)} wins!</h2><p class="go-sub">${g.s.humansOut ? 'Richest tycoon left when the last human went broke.' : g.s.timeUp ? 'Richest in Metro Manila when time ran out.' : 'Last tycoon standing in Metro Manila.'}</p>
         <ol class="standings">${rank.map((p, k) => `<li style="--pc:${p.color}"><span class="pos">${k + 1}</span><span class="mini">${tokenSVG(p.token, { shadow: false })}</span><b>${esc(p.name)}</b><em>${p.bankrupt ? 'bankrupt' : peso(g.netWorth(p.id))}</em></li>`).join('')}</ol>`,
-      actions: [{ v: 'home', label: 'Home' }, { v: 'again', label: 'Play again', kind: 'primary' }],
+      actions: this.online ? [{ v: 'home', label: 'Back home', kind: 'primary' }] : [{ v: 'home', label: 'Home' }, { v: 'again', label: 'Play again', kind: 'primary' }],
     });
     this.hooks.over(v);
   }

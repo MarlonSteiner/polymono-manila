@@ -1,7 +1,8 @@
 // Network first, so updates show up right away; the cache keeps the game playable offline.
-const CACHE = 'polymono-manila-v1';
+const CACHE = 'polymono-manila-v2';
 const FILES = ['./', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/main.js', 'js/engine.js', 'js/ai.js', 'js/ui.js', 'js/board.js', 'js/art.js', 'js/data.js', 'js/audio.js',
+  'js/net.js', 'js/online.js', 'vendor/mqtt.min.js',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +14,7 @@ self.addEventListener('activate', (e) => {
     .then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(fetch(e.request)
     .then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }

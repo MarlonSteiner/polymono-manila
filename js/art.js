@@ -137,10 +137,14 @@ const face = (x, y, s = 1, blush = '#f59b9b') => `
     <ellipse cx="-12" cy="5" rx="3.6" ry="2.2" fill="${blush}" opacity=".85"/><ellipse cx="12" cy="5" rx="3.6" ry="2.2" fill="${blush}" opacity=".85"/>
     <path d="M-3,4 Q0,7 3,4" fill="none" stroke="${C.ink}" stroke-width="1.6" stroke-linecap="round"/></g>`;
 
+const JEEP_SIGN = (x) => `<text x="${x}" y="25.6" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Fredoka,sans-serif" fill="${C.ink}" stroke="none">MANILA</text>`;
+// Vehicles are drawn facing right but always drive right to left on screen, so the token mirrors them.
+const VEHICLES = new Set(['jeepney', 'trike']);
+
 const TOKEN_ART = {
   jeepney: `
     <path d="M10,34 Q10,26 18,26 L66,26 Q72,26 72,32 L72,36 L10,36 Z" fill="#eef0f2"/>
-    <rect x="22" y="19" width="34" height="8" rx="3" fill="#f2c443"/><text x="39" y="25.6" text-anchor="middle" font-size="6.5" font-weight="800" font-family="Fredoka,sans-serif" fill="${C.ink}" stroke="none">MANILA</text>
+    <rect x="22" y="19" width="34" height="8" rx="3" fill="#f2c443"/>${JEEP_SIGN(39)}
     <path d="M12,36 L72,36 L72,46 L88,52 Q92,54 92,60 L92,74 L12,74 Q8,74 8,70 L8,40 Q8,36 12,36 Z" fill="#e2584f"/>
     <path d="M8,58 L92,58 L92,63 L8,63 Z" fill="#f2c443"/><path d="M8,63 L92,63 L92,67 L8,67 Z" fill="#4a86d6"/>
     <rect x="13" y="40" width="11" height="12" rx="3" fill="${C.glass}"/><rect x="27" y="40" width="11" height="12" rx="3" fill="${C.glass}"/>
@@ -201,7 +205,9 @@ const TOKEN_ART = {
 export function tokenSVG(id, opts = {}) {
   return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" class="tok-svg">
     ${opts.shadow === false ? '' : `<ellipse cx="50" cy="90" rx="34" ry="7" fill="${C.ink}" opacity=".18"/>`}
-    <g stroke="${C.ink}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">${TOKEN_ART[id]}</g></svg>`;
+    <g stroke="${C.ink}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">${VEHICLES.has(id)
+      ? `<g transform="matrix(-1 0 0 1 100 0)">${TOKEN_ART[id].replace(JEEP_SIGN(39), '')}</g>${id === 'jeepney' ? JEEP_SIGN(61) : ''}`
+      : TOKEN_ART[id]}</g></svg>`;
 }
 
 // ---------- tile icons ----------
