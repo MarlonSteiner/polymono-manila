@@ -94,13 +94,15 @@ function renderSetup() {
       <h3>Players <small>${setup.players.length} of 6 · tap a token to swap</small></h3>
       <div class="plist">${setup.players.map((p, k) => {
         const t = TOKENS.find((x) => x.id === p.token);
-        return `<div class="prow" style="--pc:${t.color}">
+        const you = p.human && p.name.trim().toLowerCase() === 'ikaw';
+        return `<div class="prow ${you ? 'you' : ''}" style="--pc:${t.color}">
           <button class="ptok" data-k="${k}" aria-label="Change token">${tokenSVG(p.token)}<small>${t.name}</small></button>
           <input class="pname" data-k="${k}" value="${esc(p.name)}" maxlength="14" autocomplete="off" autocapitalize="words" enterkeyhint="done">
           <div class="pkind" data-k="${k}"><button class="${p.human ? 'on' : ''}" data-h="1">${icon('user')}<span>Human</span></button><button class="${p.human ? '' : 'on'}" data-h="0">${icon('bot')}<span>CPU</span></button></div>
           ${setup.players.length > 2 ? `<button class="prem" data-k="${k}" aria-label="Remove">${icon('close')}</button>` : '<span class="prem-ph"></span>'}
         </div>`;
       }).join('')}</div>
+      ${setup.players.some((p) => p.human && p.name.trim().toLowerCase() === 'ikaw') ? '<p class="ikaw-note">👋 <b>Ikaw</b> is Tagalog for <b>“you”</b>. That’s your player. Tap the name to change it.</p>' : ''}
       ${setup.players.length < 6 ? `<button class="btn ghost add" id="s-add">${icon('plus')}<span>Add a player</span></button>` : ''}
       <h3>Starting cash</h3>${seg('startCash', [[10000, '₱10,000'], [15000, '₱15,000'], [20000, '₱20,000']])}
       <h3>Game length</h3>${seg('rounds', [[0, 'Classic'], [30, '30 rounds'], [15, '15 rounds']])}

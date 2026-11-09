@@ -1,5 +1,5 @@
 // Everything the player sees and taps during a game.
-import { BOARD, GROUPS, GROUP_TILES, STATIONS, UTILITIES, STATION_RENT, JAIL_FINE, peso } from './data.js';
+import { BOARD, GROUPS, GROUP_TILES, STATIONS, UTILITIES, STATION_RENT, JAIL_FINE, TOKENS, peso } from './data.js';
 import { tokenSVG, tileIcon, deckArt, icon, C } from './art.js';
 import { BoardView } from './board.js';
 import { sfx, isMuted, setMuted, hush } from './audio.js';
@@ -162,6 +162,12 @@ export class UI {
   onLog() { this.renderLog(); }
 
   beginTurn(p) {
+    // First turn of a new game: tell players who don't speak Tagalog that "Ikaw" is them.
+    if (!this.online && !this.ff && !this.ikawShown && p.human && this.g.s.round === 1 && p.name.trim().toLowerCase() === 'ikaw') {
+      this.ikawShown = true;
+      const tok = TOKENS.find((t) => t.id === p.token)?.name || 'token';
+      setTimeout(() => toast(`👋 <b>Ikaw</b> means <b>“you”</b>. You’re the ${esc(tok)}!`, 'good'), 1100);
+    }
     this.board.focusPid = p.id; this.board.focusPos = null;
     this.render(); this.board.applyCamera();
     const b = $('.turn-banner', this.root);
